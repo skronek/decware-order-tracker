@@ -1,0 +1,2 @@
+# Decware Order Tracker - Daily order data update
+0 0 * * * /Users/keithskronek/Code/Decware/order_tracker_windsurf_claud/scripts/update_orders.sh >> /Users/keithskronek/Code/Decware/order_tracker_windsurf_claud/logs/cron.log 2>&1
