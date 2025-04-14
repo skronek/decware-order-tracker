@@ -16,13 +16,6 @@ from django.db import transaction
 from django.core.exceptions import ObjectDoesNotExist, ValidationError
 from django.utils import timezone
 
-from selenium import webdriver
-from selenium.webdriver.chrome.service import Service as ChromeService
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-from selenium.common.exceptions import TimeoutException, WebDriverException
-
 from .models import OrderRecord, StatusHistory
 
 # Configure logging
@@ -31,14 +24,10 @@ logger = logging.getLogger(__name__)
 class DecwareOrderScraper:
     """Handles downloading and processing order data from orders.decware.com."""
     
-    # URL of the page containing the CSV button
-    PAGE_URL = "https://orders.decware.com/list_view.php"
-    CSV_BUTTON_XPATH = "/html/body/div/div[2]/section[2]/div/div/div/div/div[2]/div/div[1]/div[1]/div/button[2]/span"
+    # Direct CSV URL for Decware orders
+    CSV_URL = "https://orders.decware.com/export_csv.php"
     MAX_RETRIES = 3
-    TIMEOUT = 60
-    DOWNLOAD_WAIT_TIMEOUT = 60
-    DOWNLOAD_POLL_INTERVAL = 2
-
+    
     # Mapping from CSV Column Header (case-insensitive matching handled in parse_csv) 
     # to OrderRecord model field name
     COLUMN_MAPPING = {
@@ -56,84 +45,43 @@ class DecwareOrderScraper:
     
     def __init__(self):
         self.download_dir = tempfile.mkdtemp()
-        self.driver = self._init_driver()
-
-    def _init_driver(self):
-        """Initializes the Selenium WebDriver."""
-        options = webdriver.ChromeOptions()
-        options.add_argument('--headless')
-        options.add_argument('--no-sandbox')
-        options.add_argument('--disable-dev-shm-usage')
-        options.add_experimental_option('prefs', {
-            "download.default_directory": self.download_dir,
-            "download.prompt_for_download": False,
-            "download.directory_upgrade": True,
-            "safebrowsing.enabled": True
-        })
-        try:
-            service = ChromeService()
-            driver = webdriver.Chrome(service=service, options=options)
-            logger.info(f"WebDriver initialized. Downloads will go to: {self.download_dir}")
-            return driver
-        except WebDriverException as e:
-            logger.error(f"Failed to initialize WebDriver: {e}")
-            logger.error("Ensure chromedriver is installed and in your PATH or specify its path.")
-            return None
 
     def download_csv(self) -> Optional[str]:
         """
-        Navigates to the page, clicks the CSV button, and waits for the download.
+        Downloads the CSV file directly using requests.
         Returns the path to the downloaded CSV file or None if download fails.
         """
-        if not self.driver:
-            logger.error("WebDriver not initialized. Cannot download CSV.")
-            return None
-
         for attempt in range(self.MAX_RETRIES):
             try:
-                logger.info(f"Navigating to {self.PAGE_URL} (attempt {attempt + 1}/{self.MAX_RETRIES})")
-                self.driver.get(self.PAGE_URL)
-
-                logger.info(f"Waiting for CSV button: {self.CSV_BUTTON_XPATH}")
-                wait = WebDriverWait(self.driver, self.TIMEOUT)
-                csv_button = wait.until(
-                    EC.element_to_be_clickable((By.XPATH, self.CSV_BUTTON_XPATH))
-                )
-
-                logger.info("Clicking CSV button")
-                csv_button.click()
-
-                # Wait for download to complete
-                logger.info(f"Waiting for CSV download in {self.download_dir}...")
-                start_time = time.time()
-                downloaded_file_path = None
-                while time.time() - start_time < self.DOWNLOAD_WAIT_TIMEOUT:
-                    files = [os.path.join(self.download_dir, f) for f in os.listdir(self.download_dir)]
-                    csv_files = [f for f in files if f.lower().endswith('.csv') and not f.lower().endswith('.crdownload')]
-
-                    if csv_files:
-                        downloaded_file_path = max(csv_files, key=os.path.getctime)
-                        logger.info(f"CSV file downloaded: {downloaded_file_path}")
-                        return downloaded_file_path
-
-                    time.sleep(self.DOWNLOAD_POLL_INTERVAL)
-
-                logger.error(f"CSV download timed out after {self.DOWNLOAD_WAIT_TIMEOUT} seconds.")
-                return None
-
-            except TimeoutException:
-                logger.error(f"Timed out waiting for element (attempt {attempt + 1})")
-            except WebDriverException as e:
-                logger.error(f"WebDriver error during download (attempt {attempt + 1}): {e}")
+                logger.info(f"Downloading CSV from {self.CSV_URL} (attempt {attempt + 1}/{self.MAX_RETRIES})")
+                
+                # Make the request to download the CSV
+                response = requests.get(self.CSV_URL, timeout=60)
+                
+                if response.status_code == 200:
+                    # Create a temporary file to store the CSV
+                    csv_path = os.path.join(self.download_dir, f"decware_orders_{int(time.time())}.csv")
+                    
+                    # Write the content to the file
+                    with open(csv_path, 'wb') as f:
+                        f.write(response.content)
+                    
+                    logger.info(f"CSV file downloaded successfully: {csv_path}")
+                    return csv_path
+                else:
+                    logger.error(f"Failed to download CSV. Status code: {response.status_code}")
+            
+            except requests.RequestException as e:
+                logger.error(f"Request error during download (attempt {attempt + 1}): {e}")
             except Exception as e:
                 logger.error(f"Unexpected error during download (attempt {attempt + 1}): {e}")
-
+            
             if attempt == self.MAX_RETRIES - 1:
                 logger.error("Max retries reached for download, giving up")
                 return None
             else:
                 time.sleep(5)
-
+        
         return None
 
     def parse_csv(self, csv_path: str) -> List[Dict[str, Any]]:
@@ -328,7 +276,7 @@ class DecwareOrderScraper:
         Main entry point. Downloads CSV, processes it, and updates the database.
         Returns True if successful, False otherwise.
         """
-        logger.info("Starting order data update using Selenium scraper")
+        logger.info("Starting order data update using direct HTTP request")
 
         csv_path = self.download_csv()
         orders_processed = 0
@@ -352,15 +300,7 @@ class DecwareOrderScraper:
         return success
 
     def cleanup(self):
-        """Cleans up WebDriver and temporary download directory."""
-        if self.driver:
-            try:
-                self.driver.quit()
-                logger.info("WebDriver quit successfully.")
-            except WebDriverException as e:
-                logger.error(f"Error quitting WebDriver: {e}")
-            self.driver = None
-
+        """Cleans up temporary download directory."""
         if self.download_dir and os.path.exists(self.download_dir):
             try:
                 for filename in os.listdir(self.download_dir):
