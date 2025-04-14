@@ -1,11 +1,19 @@
 import axios from 'axios';
 
 // Define the base URL for the API
-const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:8000/api';
+const getBaseUrl = () => {
+  // Check if we're in production (on Heroku)
+  if (window.location.hostname.includes('herokuapp.com')) {
+    // In production, use relative URLs
+    return '/api';
+  }
+  // In development, use the proxy setting or explicit URL
+  return process.env.REACT_APP_API_BASE_URL || 'http://localhost:8000/api';
+};
 
 // Create an Axios instance with default configuration
 const apiClient = axios.create({
-  baseURL: API_BASE_URL,
+  baseURL: getBaseUrl(),
   headers: {
     'Content-Type': 'application/json',
     // Add any other default headers here (e.g., Authorization)

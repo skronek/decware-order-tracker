@@ -142,8 +142,8 @@ STATICFILES_DIRS = [
     os.path.join(BASE_DIR, 'frontend', 'build'),
 ]
 
-# Use the simpler static files storage for now to debug the issue
-STATICFILES_STORAGE = 'whitenoise.storage.CompressedStaticFilesStorage'
+# Use the simpler static files storage
+STATICFILES_STORAGE = 'whitenoise.storage.StaticFilesStorage'
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field

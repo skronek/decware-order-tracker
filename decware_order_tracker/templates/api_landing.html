@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#000000" />
+    <meta name="description" content="Decware Order Tracking Application" />
+    <title>Decware Order Tracking</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        header {
+            background-color: #343A3F;
+            color: white;
+            padding: 20px;
+            display: flex;
+            align-items: center;
+        }
+        .logo {
+            height: 40px;
+            margin-right: 15px;
+        }
+        h1 {
+            margin: 0;
+            font-size: 24px;
+        }
+        .content {
+            background-color: white;
+            border-radius: 5px;
+            padding: 30px;
+            margin-top: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .api-link {
+            display: inline-block;
+            margin: 10px 0;
+            background-color: #6c757d;
+            color: white;
+            padding: 10px 15px;
+            text-decoration: none;
+            border-radius: 4px;
+            font-weight: bold;
+        }
+        .api-link:hover {
+            background-color: #5a6268;
+        }
+        .api-section {
+            margin-top: 30px;
+            border-top: 1px solid #eee;
+            padding-top: 20px;
+        }
+        ul {
+            padding-left: 20px;
+        }
+        li {
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <img src="https://decware.com/newsite/images/decwarelogoblack.jpg" alt="Decware Logo" class="logo">
+        <h1>Decware Order Tracker</h1>
+    </header>
+    <div class="container">
+        <div class="content">
+            <h2>Welcome to the Decware Order Tracking System</h2>
+            <p>This application allows you to track the status of your Decware audio equipment orders.</p>
+            <p>The system is deployed on Heroku and provides a RESTful API for accessing order information.</p>
+            
+            <div class="api-section">
+                <h3>Available API Endpoints</h3>
+                <ul>
+                    <li>
+                        <strong>Order Records:</strong>
+                        <a href="/api/orders/records/" class="api-link">View Order Records</a>
+                        <p>Access information about all orders in the system.</p>
+                    </li>
+                    <li>
+                        <strong>Status Metrics:</strong>
+                        <a href="/api/orders/metrics/" class="api-link">View Status Metrics</a>
+                        <p>Get metrics about orders grouped by status.</p>
+                    </li>
+                    <li>
+                        <strong>Status History:</strong>
+                        <a href="/api/orders/history/" class="api-link">View Status History</a>
+                        <p>View the history of status changes for orders.</p>
+                    </li>
+                </ul>
+            </div>
+            
+            <div class="api-section">
+                <h3>Search Functionality</h3>
+                <p>You can search for specific orders by adding query parameters to the Order Records endpoint:</p>
+                <ul>
+                    <li><code>/api/orders/records/?customer_name=Smith</code> - Search by customer name</li>
+                    <li><code>/api/orders/records/?model=ZMA</code> - Search by model</li>
+                    <li><code>/api/orders/records/?status=TESTING</code> - Filter by status</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
