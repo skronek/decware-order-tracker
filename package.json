@@ -1,0 +1,17 @@
+{
+  "name": "decware-order-tracker",
+  "version": "1.0.0",
+  "description": "Decware Order Tracking Application",
+  "engines": {
+    "node": "16.x",
+    "npm": "8.x"
+  },
+  "scripts": {
+    "start": "cd frontend && npm start",
+    "build": "cd frontend && npm install && npm run build",
+    "postinstall": "npm run build"
+  },
+  "cacheDirectories": [
+    "frontend/node_modules"
+  ]
+}
