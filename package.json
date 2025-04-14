@@ -9,7 +9,7 @@
   "scripts": {
     "start": "cd frontend && npm start",
     "build": "cd frontend && npm install && npm run build",
-    "postinstall": "npm run build && cp -r frontend/build/* staticfiles/"
+    "postinstall": "./heroku-build.sh"
   },
   "cacheDirectories": [
     "frontend/node_modules"
