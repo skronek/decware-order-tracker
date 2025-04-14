@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+# This script runs after the Python buildpack completes
+
+echo "-----> Running post-compile hook"
+
+# Navigate to the app directory
+cd $1
+
+# Install frontend dependencies and build the React app
+echo "-----> Building React frontend"
+cd frontend
+npm install
+npm run build
+cd ..
+
+# Create staticfiles directory if it doesn't exist
+mkdir -p staticfiles
+
+# Copy the React build files to the staticfiles directory
+echo "-----> Copying React build files to staticfiles"
+cp -r frontend/build/* staticfiles/
+
+echo "-----> Post-compile hook completed"
