@@ -145,6 +145,10 @@ STATICFILES_DIRS = [
 # Use the simpler static files storage
 STATICFILES_STORAGE = 'whitenoise.storage.StaticFilesStorage'
 
+# Whitenoise settings
+WHITENOISE_ROOT = os.path.join(BASE_DIR, 'staticfiles')
+WHITENOISE_INDEX_FILE = True
+
 # Default primary key field type
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field
 
