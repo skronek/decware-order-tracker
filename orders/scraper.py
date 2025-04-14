@@ -8,7 +8,9 @@ import logging
 import os
 import tempfile
 import time
-from typing import Optional, List, Dict, Any
+import re
+from typing import Optional, List, Dict, Any, Tuple
+import sys
 
 import requests
 from django.conf import settings
@@ -90,81 +92,169 @@ class DecwareOrderScraper:
         """
         orders = []
         try:
-            # Use utf-8-sig to handle potential Byte Order Mark (BOM)
-            with open(csv_path, mode='r', encoding='utf-8-sig') as csvfile:
-                reader = csv.DictReader(csvfile)
-
-                # --- Debug: Log CSV Headers --- #
-                logger.debug(f"DEBUG: CSV Headers detected by DictReader: {reader.fieldnames}")
-                # --- End Debug --- #
-
-                # --- Debug: Log calculated required fields ONCE --- #
+            # Log environment information for debugging
+            logger.info(f"Python version: {sys.version}")
+            logger.info(f"Default encoding: {sys.getdefaultencoding()}")
+            logger.info(f"Filesystem encoding: {sys.getfilesystemencoding()}")
+            logger.info(f"Timezone: {timezone.get_current_timezone_name()}")
+            
+            # Try multiple encodings if needed
+            encodings_to_try = ['utf-8-sig', 'utf-8', 'latin-1', 'cp1252']
+            csv_read_success = False
+            
+            for encoding in encodings_to_try:
                 try:
-                    required_fields_calculated = {
-                        f.name for f in OrderRecord._meta.get_fields()
-                        if not f.is_relation and not f.null and not getattr(f, 'default', None) and not f.auto_created
-                    }
-                    logger.debug(f"DEBUG: Calculated required model fields (non-null, no default): {required_fields_calculated}")
-                except Exception as e:
-                    logger.error(f"DEBUG: Error calculating required fields: {e}")
-                # --- End Debug --- #
-
-                for i, row in enumerate(reader):
-                    order = {}
-                    processed_fields = set()
-
-                    # --- Debug: Log keys for first row --- #
-                    if i == 0:
-                        logger.debug(f"DEBUG: Row 1 Keys: {list(row.keys())}")
-                        logger.debug(f"DEBUG: Row 1 Values: {list(row.values())}") # Also log values for context
-                    # --- End Debug --- #
-
-                    for csv_key, value in row.items():
-                        if csv_key is None: continue # Skip if key is None (potential issue in some CSVs)
+                    with open(csv_path, mode='r', encoding=encoding) as csvfile:
+                        # Check if file is readable
+                        sample = csvfile.read(1024)
+                        if not sample:
+                            logger.warning(f"CSV file appears empty with encoding {encoding}")
+                            continue
+                            
+                        # Reset file pointer
+                        csvfile.seek(0)
                         
-                        normalized_csv_key = csv_key.strip()
-                        target_field = self.COLUMN_MAPPING.get(normalized_csv_key)
+                        reader = csv.DictReader(csvfile)
+                        
+                        # Verify we can read headers
+                        if not reader.fieldnames:
+                            logger.warning(f"No CSV headers detected with encoding {encoding}")
+                            continue
+                            
+                        logger.info(f"Successfully opened CSV with encoding: {encoding}")
+                        logger.debug(f"CSV Headers detected: {reader.fieldnames}")
+                        
+                        # --- Debug: Log calculated required fields ONCE --- #
+                        try:
+                            required_fields_calculated = {
+                                f.name for f in OrderRecord._meta.get_fields()
+                                if not f.is_relation and not f.null and not getattr(f, 'default', None) and not f.auto_created
+                            }
+                            logger.debug(f"Calculated required model fields: {required_fields_calculated}")
+                        except Exception as e:
+                            logger.error(f"Error calculating required fields: {e}")
+                        # --- End Debug --- #
+                        
+                        for i, row in enumerate(reader):
+                            order = {}
+                            processed_fields = set()
+                            
+                            # --- Debug: Log keys for first few rows --- #
+                            if i < 3:  # Log first 3 rows
+                                logger.debug(f"Row {i+1} Keys: {list(row.keys())}")
+                                # Log Date-Time value specifically
+                                date_time_key = next((k for k in row.keys() if k and k.strip() == 'Date-Time'), None)
+                                if date_time_key:
+                                    date_value = row.get(date_time_key, '')
+                                    logger.info(f"Row {i+1} Date-Time value: '{date_value}'")
+                                    # Log character codes for debugging
+                                    if date_value:
+                                        char_codes = [f"{j}:{ord(c)}" for j, c in enumerate(date_value)]
+                                        logger.debug(f"Row {i+1} Date-Time chars: {char_codes}")
+                            # --- End Debug --- #
+                            
+                            for csv_key, value in row.items():
+                                if csv_key is None: continue # Skip if key is None (potential issue in some CSVs)
+                                
+                                normalized_csv_key = csv_key.strip()
+                                target_field = self.COLUMN_MAPPING.get(normalized_csv_key)
 
-                        if target_field:
-                            clean_value = value.strip() if value else ''
-                            try:
-                                if target_field == 'quantity':
-                                    order[target_field] = int(clean_value) if clean_value.isdigit() else 1
-                                elif target_field == 'order_date':
-                                    if clean_value:  # Only try to parse if there's a value
-                                        try:
-                                            naive_datetime = datetime.datetime.strptime(clean_value, '%Y-%m-%d %H:%M:%S')
-                                            order[target_field] = timezone.make_aware(naive_datetime, timezone.get_current_timezone())
-                                        except ValueError as e:
-                                            logger.error(f"DATE PARSE ERROR for 'order_date' on row {i+1}: {e}. Input value: '{clean_value}', Tried format: '%Y-%m-%d %H:%M:%S'")
-                                            order[target_field] = None  # Set to None if parsing fails
+                                if target_field:
+                                    clean_value = value.strip() if value else ''
+                                    try:
+                                        if target_field == 'quantity':
+                                            order[target_field] = int(clean_value) if clean_value.isdigit() else 1
+                                        elif target_field == 'order_date':
+                                            if clean_value:  # Only try to parse if there's a value
+                                                # Debug: Log the exact value and its character representation
+                                                debug_chars = [f"{i}:{ord(c)}" for i, c in enumerate(clean_value)]
+                                                logger.info(f"Processing Date-Time value: '{clean_value}', length: {len(clean_value)}, chars: {debug_chars}")
+                                                
+                                                # Clean the date string to remove invisible characters
+                                                original_value = clean_value
+                                                clean_value = self._clean_date_string(clean_value)
+                                                
+                                                if original_value != clean_value:
+                                                    logger.info(f"Cleaned date string from '{original_value}' to '{clean_value}'")
+                                                    debug_chars = [f"{i}:{ord(c)}" for i, c in enumerate(clean_value)]
+                                                    logger.debug(f"Cleaned Date-Time chars: {debug_chars}")
+                                                
+                                                try:
+                                                    # First, try the expected format directly
+                                                    try:
+                                                        naive_datetime = datetime.datetime.strptime(clean_value, '%Y-%m-%d %H:%M:%S')
+                                                        logger.info(f"Successfully parsed date: {naive_datetime}")
+                                                        
+                                                        # Make timezone-aware
+                                                        try:
+                                                            aware_datetime = timezone.make_aware(naive_datetime, timezone.get_current_timezone())
+                                                            order[target_field] = aware_datetime
+                                                            logger.info(f"Successfully made timezone-aware: {aware_datetime}")
+                                                        except Exception as tz_error:
+                                                            logger.error(f"TIMEZONE ERROR: {tz_error}")
+                                                            # Try with UTC timezone explicitly
+                                                            try:
+                                                                from django.utils.timezone import utc
+                                                                aware_datetime = datetime.datetime.replace(naive_datetime, tzinfo=utc)
+                                                                order[target_field] = aware_datetime
+                                                                logger.info(f"Made timezone-aware using UTC: {aware_datetime}")
+                                                            except Exception as utc_error:
+                                                                logger.error(f"UTC TIMEZONE ERROR: {utc_error}")
+                                                                raise ValueError(f"Cannot make datetime timezone-aware: {naive_datetime}")
+                                                    except ValueError as format_error:
+                                                        # Log the specific parsing error
+                                                        logger.error(f"Date format error: {format_error}")
+                                                        raise  # Re-raise to terminate the import process
+                                                except Exception as e:
+                                                    logger.error(f"Critical date parsing error: {e}")
+                                                    raise ValueError(f"Failed to parse date '{clean_value}' on row {i+1}: {e}")
+                                            else:
+                                                # Empty date value, this is a critical error
+                                                error_msg = f"Empty date value found on row {i+1}. All orders must have a date."
+                                                logger.error(error_msg)
+                                                raise ValueError(error_msg)  # Terminate the import process
+                                        else:
+                                            order[target_field] = clean_value
+                                        processed_fields.add(target_field) # Add to processed *after* successful processing
+                                    except ValueError as e:
+                                        logger.error(f"Error parsing value for field '{target_field}' on row {i+1}: {e}. Value: '{value}'")
+                                # else: # Optional: Log if a CSV column doesn't map to anything
+                                #     logger.debug(f"Row {i+1}: Unmapped CSV column '{csv_key}'")
+
+                            # Apply defaults ONLY for fields DEFINED in COLUMN_MAPPING that were NOT found in the row
+                            for model_field in self.COLUMN_MAPPING.values():
+                                if model_field not in processed_fields:
+                                    logger.debug(f"Row {i+1}: Model field '{model_field}' not found in CSV row keys (using default).")
+                                    if model_field == 'quantity':
+                                        order[model_field] = 1
+                                    elif model_field == 'order_date':
+                                        # If order_date field is missing from CSV, this is a critical error
+                                        error_msg = f"Missing 'Date-Time' column in CSV for row {i+1}. Cannot proceed without date information."
+                                        logger.error(error_msg)
+                                        raise ValueError(error_msg)  # Terminate the import process
                                     else:
-                                        order[target_field] = None  # Set to None for empty values
-                                else:
-                                    order[target_field] = clean_value
-                                processed_fields.add(target_field) # Add to processed *after* successful processing
-                            except ValueError as e:
-                                logger.error(f"Error parsing value for field '{target_field}' on row {i+1}: {e}. Value: '{value}'")
-                        # else: # Optional: Log if a CSV column doesn't map to anything
-                        #     logger.debug(f"Row {i+1}: Unmapped CSV column '{csv_key}'")
-
-                    # Apply defaults ONLY for fields DEFINED in COLUMN_MAPPING that were NOT found in the row
-                    for model_field in self.COLUMN_MAPPING.values():
-                        if model_field not in processed_fields:
-                            logger.debug(f"Row {i+1}: Model field '{model_field}' not found in CSV row keys (using default).")
-                            if model_field == 'quantity':
-                                order[model_field] = 1
-                            elif model_field == 'order_date':
-                                order[model_field] = None # Default to None if date column missing/unparsable
-                            else:
-                                order[model_field] = '' # Default to empty string if missing
-                    
-                    # Normalize status after all fields are potentially set
-                    order['status'] = self._normalize_status(order.get('status', '')) 
-                    
-                    orders.append(order)
+                                        order[model_field] = '' # Default to empty string if missing
+                            
+                            # Normalize status after all fields are potentially set
+                            order['status'] = self._normalize_status(order.get('status', '')) 
+                            
+                            orders.append(order)
                         
-        except (IOError, csv.Error, UnicodeDecodeError) as e: # Added UnicodeDecodeError
+                        csv_read_success = True
+                        break  # Successfully read the CSV, exit the encoding loop
+                        
+                except UnicodeDecodeError as e:
+                    logger.warning(f"Failed to read CSV with encoding {encoding}: {e}")
+                    continue
+                except Exception as e:
+                    logger.error(f"Unexpected error reading CSV with encoding {encoding}: {e}")
+                    raise
+            
+            if not csv_read_success:
+                logger.error("Failed to read CSV with any of the attempted encodings")
+                return []
+        
+        except (IOError, csv.Error) as e: # Removed UnicodeDecodeError
             logger.error(f"Error parsing CSV file '{csv_path}': {str(e)}", exc_info=True)
             return []
         except Exception as e: # Catch other potential errors during processing
@@ -203,6 +293,82 @@ class DecwareOrderScraper:
                 logger.debug(f"Unknown status: {status}")
             return 'NEW'  # Return 'NEW' for unknown statuses to match test expectations
     
+    def _test_date_parsing(self, date_string: str) -> Tuple[bool, str, Optional[datetime.datetime]]:
+        """
+        Test date parsing with detailed diagnostics.
+        Returns a tuple of (success, error_message, parsed_date)
+        """
+        if not date_string or not date_string.strip():
+            return False, "Empty date string", None
+        
+        # Check for invisible characters
+        if len(date_string) != len(date_string.strip()):
+            return False, f"Date string contains leading/trailing whitespace: '{date_string}'", None
+        
+        # Check for non-ASCII characters
+        non_ascii = [c for c in date_string if ord(c) > 127]
+        if non_ascii:
+            return False, f"Date string contains non-ASCII characters: {non_ascii}", None
+        
+        # Check for common date format patterns
+        date_patterns = [
+            (r'\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}', '%Y-%m-%d %H:%M:%S'),  # YYYY-MM-DD HH:MM:SS
+            (r'\d{2}/\d{2}/\d{4} \d{2}:\d{2}:\d{2}', '%m/%d/%Y %H:%M:%S'),  # MM/DD/YYYY HH:MM:SS
+            (r'\d{2}/\d{2}/\d{4} \d{2}:\d{2}', '%m/%d/%Y %H:%M'),           # MM/DD/YYYY HH:MM
+            (r'\d{4}-\d{2}-\d{2}', '%Y-%m-%d'),                             # YYYY-MM-DD
+        ]
+        
+        matched_format = None
+        for pattern, date_format in date_patterns:
+            if re.match(pattern, date_string):
+                matched_format = date_format
+                break
+        
+        if matched_format:
+            try:
+                parsed_date = datetime.datetime.strptime(date_string, matched_format)
+                return True, f"Successfully parsed using format: {matched_format}", parsed_date
+            except ValueError as e:
+                return False, f"Matched pattern for format {matched_format} but parsing failed: {str(e)}", None
+        else:
+            return False, f"No matching pattern found for: '{date_string}'", None
+    
+    def _clean_date_string(self, date_string: str) -> str:
+        """
+        Clean a date string by removing invisible characters and normalizing spaces.
+        """
+        if not date_string:
+            return date_string
+            
+        # Replace common invisible characters
+        cleaned = date_string
+        
+        # Replace zero-width space
+        cleaned = cleaned.replace('\u200b', '')
+        
+        # Replace non-breaking space with regular space
+        cleaned = cleaned.replace('\xa0', ' ')
+        
+        # Replace other invisible Unicode characters
+        invisible_chars = [
+            '\u200c',  # Zero-width non-joiner
+            '\u200d',  # Zero-width joiner
+            '\u2060',  # Word joiner
+            '\ufeff',  # Zero-width no-break space (BOM)
+            '\u00ad',  # Soft hyphen
+        ]
+        for char in invisible_chars:
+            cleaned = cleaned.replace(char, '')
+        
+        # Normalize whitespace (replace multiple spaces with single space)
+        cleaned = ' '.join(cleaned.split())
+        
+        # Log if cleaning changed the string
+        if cleaned != date_string:
+            logger.debug(f"Cleaned date string: '{date_string}' -> '{cleaned}'")
+            
+        return cleaned
+
     @transaction.atomic
     def update_database(self, orders: List[Dict[str, Any]]) -> int:
         """
@@ -225,10 +391,17 @@ class DecwareOrderScraper:
                 # Define the fields for creation or update
                 defaults = {
                     'quantity': order_data.get('quantity', 1),
-                    'order_date': order_data.get('order_date', None),
                     'options': order_data.get('options', ''),
                     'status': order_data.get('status', 'NEW') # Already normalized
                 }
+                
+                # Handle order_date separately to ensure it's never null
+                order_date = order_data.get('order_date')
+                if order_date is None:
+                    # Use current time as default if order_date is null
+                    defaults['order_date'] = timezone.now()
+                else:
+                    defaults['order_date'] = order_date
 
                 # --- Check existing status BEFORE update_or_create ---
                 old_order_status = None
