@@ -15,15 +15,8 @@ def index(request):
     View to serve the React frontend
     """
     try:
-        # Try to serve the React app's index.html directly from staticfiles
-        index_path = os.path.join(settings.STATIC_ROOT, 'index.html')
-        
-        if os.path.exists(index_path):
-            with open(index_path, 'r') as f:
-                return HttpResponse(f.read())
-        else:
-            logger.warning(f"React index.html not found at {index_path}, falling back to template")
-            return api_landing_page(request)
+        # First try to serve the React app from the templates directory
+        return render(request, 'react/index.html')
     except Exception as e:
         logger.error(f"Error serving React frontend: {str(e)}")
         return api_landing_page(request)

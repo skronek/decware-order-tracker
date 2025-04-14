@@ -18,6 +18,10 @@ mkdir -p staticfiles
 echo "===== Copying React build files to staticfiles ====="
 cp -rv frontend/build/* staticfiles/
 
+echo "===== Copying React index.html to Django templates ====="
+mkdir -p decware_order_tracker/templates/react
+cp -v frontend/build/index.html decware_order_tracker/templates/react/index.html
+
 echo "===== Listing staticfiles directory contents ====="
 ls -la staticfiles/
 ls -la staticfiles/static/js/ || echo "No js directory found in staticfiles/static"
