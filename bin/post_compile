@@ -20,4 +20,10 @@ mkdir -p staticfiles
 echo "-----> Copying React build files to staticfiles"
 cp -r frontend/build/* staticfiles/
 
+# List the contents of the staticfiles directory for debugging
+echo "-----> Contents of staticfiles directory:"
+ls -la staticfiles/
+ls -la staticfiles/static/js/
+ls -la staticfiles/static/css/
+
 echo "-----> Post-compile hook completed"
