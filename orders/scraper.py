@@ -11,12 +11,20 @@ import time
 import re
 from typing import Optional, List, Dict, Any, Tuple
 import sys
+import shutil
 
 import requests
 from django.conf import settings
 from django.db import transaction
 from django.core.exceptions import ObjectDoesNotExist, ValidationError
 from django.utils import timezone
+from selenium import webdriver
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.chrome.service import Service
+from selenium.common.exceptions import TimeoutException, NoSuchElementException
 
 from .models import OrderRecord, StatusHistory
 
@@ -26,8 +34,8 @@ logger = logging.getLogger(__name__)
 class DecwareOrderScraper:
     """Handles downloading and processing order data from orders.decware.com."""
     
-    # Direct CSV URL for Decware orders
-    CSV_URL = "https://orders.decware.com/export_csv.php"
+    # Website URL for Decware orders
+    DECWARE_URL = "https://orders.decware.com/"
     MAX_RETRIES = 3
     
     # Mapping from CSV Column Header (case-insensitive matching handled in parse_csv) 
@@ -47,42 +55,154 @@ class DecwareOrderScraper:
     
     def __init__(self):
         self.download_dir = tempfile.mkdtemp()
+        logger.info(f"Created temporary download directory: {self.download_dir}")
 
     def download_csv(self) -> Optional[str]:
         """
-        Downloads the CSV file directly using requests.
+        Downloads the CSV file using Selenium to interact with the Decware website.
         Returns the path to the downloaded CSV file or None if download fails.
         """
-        for attempt in range(self.MAX_RETRIES):
+        logger.info("Starting CSV download using Selenium browser automation")
+        
+        # Set up Chrome options
+        chrome_options = Options()
+        chrome_options.add_argument("--headless")  # Run in headless mode
+        chrome_options.add_argument("--no-sandbox")
+        chrome_options.add_argument("--disable-dev-shm-usage")
+        
+        # Set download preferences
+        prefs = {
+            "download.default_directory": self.download_dir,
+            "download.prompt_for_download": False,
+            "download.directory_upgrade": True,
+            "safebrowsing.enabled": False
+        }
+        chrome_options.add_experimental_option("prefs", prefs)
+        
+        driver = None
+        try:
+            logger.info("Initializing Chrome WebDriver")
+            driver = webdriver.Chrome(options=chrome_options)
+            
+            # Navigate to Decware website
+            logger.info(f"Navigating to Decware website: {self.DECWARE_URL}")
+            driver.get(self.DECWARE_URL)
+            
+            # Wait for page to load
+            logger.info("Waiting for page to load")
+            WebDriverWait(driver, 10).until(
+                EC.presence_of_element_located((By.TAG_NAME, "body"))
+            )
+            
+            # Look for the CSV button
+            logger.info("Looking for CSV button")
             try:
-                logger.info(f"Downloading CSV from {self.CSV_URL} (attempt {attempt + 1}/{self.MAX_RETRIES})")
+                # Try different potential selectors for the CSV button
+                csv_button = None
+                selectors_to_try = [
+                    "//button[contains(text(), 'CSV')]",  # XPath for button with text 'CSV'
+                    "//a[contains(text(), 'CSV')]",       # XPath for link with text 'CSV'
+                    "//input[contains(@value, 'CSV')]",   # XPath for input with value 'CSV'
+                    "//button[contains(@id, 'csv')]",     # XPath for button with id containing 'csv'
+                    "//a[contains(@id, 'csv')]",          # XPath for link with id containing 'csv'
+                    "//a[contains(@href, 'export_csv')]", # XPath for link with href containing 'export_csv'
+                ]
                 
-                # Make the request to download the CSV
-                response = requests.get(self.CSV_URL, timeout=60)
+                for selector in selectors_to_try:
+                    logger.info(f"Trying selector: {selector}")
+                    try:
+                        elements = driver.find_elements(By.XPATH, selector)
+                        if elements:
+                            csv_button = elements[0]
+                            logger.info(f"Found CSV button using selector: {selector}")
+                            break
+                    except Exception as e:
+                        logger.warning(f"Error with selector {selector}: {e}")
                 
-                if response.status_code == 200:
-                    # Create a temporary file to store the CSV
-                    csv_path = os.path.join(self.download_dir, f"decware_orders_{int(time.time())}.csv")
+                if not csv_button:
+                    # If we couldn't find the button, take a screenshot for debugging
+                    screenshot_path = os.path.join(self.download_dir, "page_screenshot.png")
+                    driver.save_screenshot(screenshot_path)
+                    logger.error(f"Could not find CSV button. Screenshot saved to {screenshot_path}")
                     
-                    # Write the content to the file
-                    with open(csv_path, 'wb') as f:
-                        f.write(response.content)
+                    # Log the page source for debugging
+                    logger.debug(f"Page source: {driver.page_source[:1000]}...")  # Log first 1000 chars
                     
-                    logger.info(f"CSV file downloaded successfully: {csv_path}")
-                    return csv_path
-                else:
-                    logger.error(f"Failed to download CSV. Status code: {response.status_code}")
-            
-            except requests.RequestException as e:
-                logger.error(f"Request error during download (attempt {attempt + 1}): {e}")
-            except Exception as e:
-                logger.error(f"Unexpected error during download (attempt {attempt + 1}): {e}")
-            
-            if attempt == self.MAX_RETRIES - 1:
-                logger.error("Max retries reached for download, giving up")
+                    return None
+                
+                # Click the CSV button
+                logger.info("Clicking CSV button")
+                csv_button.click()
+                
+                # Wait for download to complete (check for new files in download directory)
+                logger.info("Waiting for download to complete")
+                wait_time = 0
+                max_wait_time = 30  # seconds
+                download_complete = False
+                
+                while wait_time < max_wait_time and not download_complete:
+                    time.sleep(1)
+                    wait_time += 1
+                    
+                    # Check for CSV files in download directory
+                    csv_files = [f for f in os.listdir(self.download_dir) if f.endswith('.csv')]
+                    if csv_files:
+                        download_complete = True
+                        logger.info(f"Download completed in {wait_time} seconds")
+                        break
+                
+                if not download_complete:
+                    logger.error(f"Download did not complete after {max_wait_time} seconds")
+                    return None
+                
+                # Find the downloaded CSV file
+                csv_files = [f for f in os.listdir(self.download_dir) if f.endswith('.csv')]
+                if not csv_files:
+                    logger.error("No CSV files found in download directory after clicking CSV button")
+                    return None
+                
+                # Use the most recent CSV file
+                csv_file = sorted(csv_files, key=lambda x: os.path.getmtime(os.path.join(self.download_dir, x)), reverse=True)[0]
+                csv_path = os.path.join(self.download_dir, csv_file)
+                
+                # Log file stats
+                file_size = os.path.getsize(csv_path)
+                logger.info(f"CSV file downloaded: {csv_path}, size: {file_size} bytes")
+                
+                # Preview file content (first 500 bytes)
+                with open(csv_path, 'r', encoding='utf-8', errors='replace') as f:
+                    preview = f.read(500)
+                    logger.info(f"CSV file preview (first 500 chars): {preview}")
+                
+                return csv_path
+                
+            except NoSuchElementException:
+                logger.error("CSV button not found on the page")
+                
+                # Take a screenshot for debugging
+                screenshot_path = os.path.join(self.download_dir, "page_screenshot.png")
+                driver.save_screenshot(screenshot_path)
+                logger.error(f"Screenshot saved to {screenshot_path}")
+                
                 return None
-            else:
-                time.sleep(5)
+                
+            except TimeoutException:
+                logger.error("Timed out waiting for page to load")
+                return None
+                
+            except Exception as e:
+                logger.error(f"Error during Selenium automation: {e}")
+                return None
+                
+        except Exception as e:
+            logger.error(f"Error initializing WebDriver: {e}")
+            return None
+            
+        finally:
+            # Clean up WebDriver
+            if driver:
+                logger.info("Closing WebDriver")
+                driver.quit()
         
         return None
 
@@ -93,10 +213,17 @@ class DecwareOrderScraper:
         orders = []
         try:
             # Log environment information for debugging
-            logger.info(f"Python version: {sys.version}")
-            logger.info(f"Default encoding: {sys.getdefaultencoding()}")
-            logger.info(f"Filesystem encoding: {sys.getfilesystemencoding()}")
-            logger.info(f"Timezone: {timezone.get_current_timezone_name()}")
+            logger.info(f"DEBUG: Python version: {sys.version}")
+            logger.info(f"DEBUG: Default encoding: {sys.getdefaultencoding()}")
+            logger.info(f"DEBUG: Filesystem encoding: {sys.getfilesystemencoding()}")
+            logger.info(f"DEBUG: Timezone: {timezone.get_current_timezone_name()}")
+            
+            # Log file information
+            logger.info(f"DEBUG: CSV file path: {csv_path}")
+            logger.info(f"DEBUG: CSV file exists: {os.path.exists(csv_path)}")
+            if os.path.exists(csv_path):
+                logger.info(f"DEBUG: CSV file size: {os.path.getsize(csv_path)} bytes")
+                logger.info(f"DEBUG: CSV file permissions: {oct(os.stat(csv_path).st_mode)[-3:]}")
             
             # Try multiple encodings if needed
             encodings_to_try = ['utf-8-sig', 'utf-8', 'latin-1', 'cp1252']
@@ -104,25 +231,38 @@ class DecwareOrderScraper:
             
             for encoding in encodings_to_try:
                 try:
+                    logger.info(f"DEBUG: Trying to open CSV with encoding: {encoding}")
                     with open(csv_path, mode='r', encoding=encoding) as csvfile:
                         # Check if file is readable
                         sample = csvfile.read(1024)
                         if not sample:
-                            logger.warning(f"CSV file appears empty with encoding {encoding}")
+                            logger.warning(f"DEBUG: CSV file appears empty with encoding {encoding}")
                             continue
+                        
+                        # Log sample content
+                        logger.info(f"DEBUG: CSV sample content (first 1024 chars): {sample}")
                             
                         # Reset file pointer
                         csvfile.seek(0)
                         
+                        logger.info(f"DEBUG: Creating CSV DictReader with encoding {encoding}")
                         reader = csv.DictReader(csvfile)
                         
                         # Verify we can read headers
                         if not reader.fieldnames:
-                            logger.warning(f"No CSV headers detected with encoding {encoding}")
+                            logger.warning(f"DEBUG: No CSV headers detected with encoding {encoding}")
                             continue
                             
-                        logger.info(f"Successfully opened CSV with encoding: {encoding}")
-                        logger.debug(f"CSV Headers detected: {reader.fieldnames}")
+                        logger.info(f"DEBUG: Successfully opened CSV with encoding: {encoding}")
+                        logger.info(f"DEBUG: CSV Headers detected: {reader.fieldnames}")
+                        
+                        # Check specifically for Date-Time column
+                        if 'Date-Time' not in reader.fieldnames:
+                            date_time_alternatives = [field for field in reader.fieldnames if 'date' in field.lower() or 'time' in field.lower()]
+                            if date_time_alternatives:
+                                logger.info(f"DEBUG: 'Date-Time' column not found, but found possible alternatives: {date_time_alternatives}")
+                            else:
+                                logger.error(f"DEBUG: 'Date-Time' column not found in headers: {reader.fieldnames}")
                         
                         # --- Debug: Log calculated required fields ONCE --- #
                         try:
