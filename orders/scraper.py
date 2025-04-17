@@ -102,7 +102,10 @@ class DecwareOrderScraper:
                 
                 # Use ChromeDriver from the buildpack
                 chrome_driver_path = os.environ.get('CHROMEDRIVER_PATH', '/app/.chromedriver/bin/chromedriver')
-                driver = webdriver.Chrome(executable_path=chrome_driver_path, options=chrome_options)
+                
+                # Use Service class for the driver path in newer Selenium versions
+                service = Service(executable_path=chrome_driver_path)
+                driver = webdriver.Chrome(service=service, options=chrome_options)
                 logger.info(f"Using Heroku Chrome configuration: Binary={chrome_bin}, Driver={chrome_driver_path}")
             else:
                 # Local development
