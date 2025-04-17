@@ -71,13 +71,6 @@ class DecwareOrderScraper:
         chrome_options.add_argument("--no-sandbox")
         chrome_options.add_argument("--disable-gpu")
         chrome_options.add_argument("--window-size=1280,1696")
-        chrome_options.add_argument("--disable-application-cache")
-        chrome_options.add_argument("--disable-infobars")
-        chrome_options.add_argument("--hide-scrollbars")
-        chrome_options.add_argument("--enable-logging")
-        chrome_options.add_argument("--log-level=0")
-        chrome_options.add_argument("--single-process")
-        chrome_options.add_argument("--ignore-certificate-errors")
         
         # Set download preferences
         prefs = {
@@ -97,16 +90,9 @@ class DecwareOrderScraper:
             
             if is_heroku:
                 # On Heroku, use the Chrome binary from the buildpack
-                chrome_bin = os.environ.get('GOOGLE_CHROME_BIN', '/app/.apt/usr/bin/google-chrome')
-                chrome_options.binary_location = chrome_bin
-                
-                # Use ChromeDriver from the buildpack
-                chrome_driver_path = os.environ.get('CHROMEDRIVER_PATH', '/app/.chromedriver/bin/chromedriver')
-                
-                # Use Service class for the driver path in newer Selenium versions
-                service = Service(executable_path=chrome_driver_path)
-                driver = webdriver.Chrome(service=service, options=chrome_options)
-                logger.info(f"Using Heroku Chrome configuration: Binary={chrome_bin}, Driver={chrome_driver_path}")
+                chrome_options.binary_location = os.environ.get("GOOGLE_CHROME_SHIM", None)
+                driver = webdriver.Chrome(options=chrome_options)
+                logger.info(f"Using Heroku Chrome configuration with GOOGLE_CHROME_SHIM")
             else:
                 # Local development
                 driver = webdriver.Chrome(options=chrome_options)
