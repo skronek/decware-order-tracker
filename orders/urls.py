@@ -1,6 +1,7 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from . import views
+from . import api
 
 app_name = 'orders'
 
@@ -13,4 +14,5 @@ router.register(r'history', views.StatusHistoryViewSet, basename='history')
 # The API URLs are now determined automatically by the router
 urlpatterns = [
     path('', include(router.urls)),
+    path('api/orders/bulk-update/', api.bulk_update_orders, name='bulk_update_orders'),
 ]

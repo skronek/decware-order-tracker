@@ -1,0 +1,19 @@
+[build]
+  command = "python manage.py collectstatic --noinput && pip install -r requirements.txt"
+  publish = "staticfiles"
+
+[build.environment]
+  PYTHON_VERSION = "3.9"
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+  force = false
+  conditions = {Role = ["admin"]}
+
+[dev]
+  command = "python manage.py runserver"
+  port = 8000
+  publish = "staticfiles"
+  framework = "django"

@@ -37,3 +37,14 @@ Thumbs.db
 
 # Environment variables
 .env
+
+# Logs
+logs/*.log
+
+# Local scratch/diagnostic scripts
+debug_date_parsing.py
+simple_date_test.py
+simple_env_test.py
+test_date_parsing.py
+test_environment.py
+local_update.py
