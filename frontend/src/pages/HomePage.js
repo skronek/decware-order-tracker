@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Typography, Container, Box, Paper, Grid, CircularProgress, Divider, Button } from '@mui/material';
+import { Typography, Container, Box, Paper, Grid, CircularProgress, Divider, Button, Link as MuiLink } from '@mui/material';
 import axios from 'axios';
 import { Link } from 'react-router-dom';
 import { getSavedOrderIds, removeOrderId } from '../utils/storage'; // Import storage helpers
@@ -91,7 +91,20 @@ const HomePage = () => {
         </Typography>
         <Typography variant="body1" paragraph>
           Welcome to the Decware Order Tracker. Use this application to track the status of your Decware order
-          and view estimated completion times.
+          and view estimated completion times. Order statuses are read nightly from Decware's
+          official{' '}
+          <MuiLink href="https://orders.decware.com/list_view.php" target="_blank" rel="noopener noreferrer">
+            order list
+          </MuiLink>
+          , and this site keeps a history of each order's progress.
+        </Typography>
+        <Typography variant="body1" paragraph>
+          <strong>How completion dates are estimated:</strong> Decware builds orders roughly first come,
+          first served. Almost all of the wait is spent in the queue before a build starts; the build itself
+          usually takes about two weeks. We count how many orders are ahead of yours and divide by the
+          number of orders Decware has started each week over the past year, then add the typical build
+          time. The later date in the range assumes the shop works more slowly than it has recently.
+          These are estimates, not dates from Decware, and they're updated every night as the queue moves.
         </Typography>
       </Box>
 
