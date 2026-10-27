@@ -53,6 +53,18 @@ describe('SearchResults', () => {
     expect(screen.getByText(/Order not found/i)).toBeInTheDocument();
   });
 
+  it('renders the estimated completion range without shifting the dates', () => {
+    const rangedOrder = {
+      ...mockOrder,
+      estimated_completion: { estimated_date: '2027-03-03', range_end_date: '2027-03-10', confidence_level: 'LOW' },
+    };
+    render(<SearchResults results={[rangedOrder]} loading={false} error={null} />);
+
+    const start = new Date(2027, 2, 3).toLocaleDateString();
+    const end = new Date(2027, 2, 10).toLocaleDateString();
+    expect(screen.getByText(`${start} – ${end}`, { exact: false })).toBeInTheDocument();
+  });
+
   it('renders order details when a single result is provided', () => {
     render(<SearchResults results={[mockOrder]} loading={false} error={null} />);
 

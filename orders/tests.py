@@ -1,5 +1,5 @@
 from django.test import TestCase
-from .models import OrderRecord, StatusHistory, StatusMetrics
+from .models import OrderEstimate, OrderRecord, StatusHistory, StatusMetrics
 from .serializers import OrderRecordSerializer, StatusHistorySerializer, StatusMetricsSerializer
 from rest_framework.test import APITestCase
 from rest_framework import status as http_status
@@ -78,12 +78,13 @@ class OrderRecordSerializerTests(TestCase):
             timestamp=cls.history1_time
         )
         
-        # Create status metrics
-        cls.metrics1 = StatusMetrics.objects.create(
-            status="PARTS_PULLED",
-            average_time_days=20,
-            sample_size=15,
-            confidence_level="MEDIUM"
+        # Create stored estimate
+        cls.estimate1 = OrderEstimate.objects.create(
+            order=cls.order1,
+            estimated_date=timezone.localdate() + timezone.timedelta(days=20),
+            range_end_date=timezone.localdate() + timezone.timedelta(days=30),
+            confidence_level="MEDIUM",
+            computed_at=timezone.now(),
         )
 
     def tearDown(self):
@@ -98,8 +99,8 @@ class OrderRecordSerializerTests(TestCase):
         data = serializer.data
 
         # Expected data based on setUpTestData
-        expected_days_remaining = 20.0  # Value from the metrics we created
-        expected_confidence = 'MEDIUM'  # Because PARTS_PULLED metric is MEDIUM
+        expected_days_remaining = 20  # From the stored estimate
+        expected_confidence = 'MEDIUM'
 
         # --- Assert Basic Fields ---
         self.assertEqual(data['id'], self.order1.id)
@@ -124,56 +125,12 @@ class OrderRecordSerializerTests(TestCase):
         self.assertEqual(est_completion['days_remaining'], expected_days_remaining)
         self.assertEqual(est_completion['confidence_level'], expected_confidence)
 
-    def test_estimated_completion_no_metrics(self):
-        """Test estimated_completion when no relevant metrics exist."""
-        # Create an order with a status for which we haven't defined metrics
-        order_final_status = OrderRecord.objects.create(
+    def test_estimated_completion_without_estimate(self):
+        """Orders without a stored estimate (e.g. finished ones) have no estimated_completion."""
+        finished = OrderRecord.objects.create(
             customer_name="Final Status Test", model="FINAL", base="B", volts="V", status='PASSED_QC'
         )
-        
-        # Force a specific serializer for testing
-        from django.conf import settings
-        old_testing = getattr(settings, 'TESTING', False)
-        setattr(settings, 'TESTING', True)
-        
-        # Create a custom serializer that returns None for estimated_completion
-        class TestSerializer(OrderRecordSerializer):
-            def get_estimated_completion(self, obj):
-                return None
-                
-        serializer = TestSerializer(instance=order_final_status)
-        data = serializer.data
-        
-        # Reset the TESTING flag
-        setattr(settings, 'TESTING', old_testing)
-        
-        # Should return None for this specific test case
-        self.assertIsNone(data['estimated_completion'])
-
-    def test_estimated_completion_invalid_status(self):
-        """Test estimated_completion for an order with an invalid status."""
-        # Create an order with an invalid status
-        order_invalid_status = OrderRecord.objects.create(
-            customer_name="Invalid Status", model="INVALID", base="B", volts="V", status='PASSED_QC'
-        )
-        
-        # Force a specific serializer for testing
-        from django.conf import settings
-        old_testing = getattr(settings, 'TESTING', False)
-        setattr(settings, 'TESTING', True)
-        
-        # Create a custom serializer that returns None for estimated_completion
-        class TestSerializer(OrderRecordSerializer):
-            def get_estimated_completion(self, obj):
-                return None
-                
-        serializer = TestSerializer(instance=order_invalid_status)
-        data = serializer.data
-        
-        # Reset the TESTING flag
-        setattr(settings, 'TESTING', old_testing)
-        
-        # Should return None for this specific test case
+        data = OrderRecordSerializer(instance=finished).data
         self.assertIsNone(data['estimated_completion'])
 
 

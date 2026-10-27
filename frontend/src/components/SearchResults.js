@@ -21,10 +21,16 @@ const formatDate = (dateString) => {
 };
 
 // Helper to format estimated completion
+// Estimates are calendar dates (YYYY-MM-DD); parse them as local so they don't shift a day
+const formatDay = (day) => new Date(`${day}T00:00:00`).toLocaleDateString();
+
 const formatEstCompletion = (completionData) => {
   if (!completionData) return 'N/A';
-  const { days_remaining, estimated_date } = completionData;
-  if (estimated_date) return formatDate(estimated_date); // Fallback to date if days missing
+  const { days_remaining, estimated_date, range_end_date } = completionData;
+  if (estimated_date && range_end_date && range_end_date !== estimated_date) {
+    return `${formatDay(estimated_date)} – ${formatDay(range_end_date)}`;
+  }
+  if (estimated_date) return formatDate(estimated_date);
   else if (days_remaining !== undefined && days_remaining !== null) {
       if (days_remaining < 0) return 'Overdue'; // Handle overdue case
       if (days_remaining === 0) return 'Today';

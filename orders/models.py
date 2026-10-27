@@ -81,3 +81,19 @@ class StatusMetrics(models.Model):
 
     def __str__(self):
         return f"{self.status} - {self.average_time_days:.1f} days (Confidence: {self.confidence_level})"
+
+
+class OrderEstimate(models.Model):
+    """Estimated Passed QC date for an active order, recomputed after each scraper run."""
+    order = models.OneToOneField(OrderRecord, on_delete=models.CASCADE, related_name='estimate')
+    estimated_date = models.DateField(help_text="Most likely date the order passes QC")
+    range_end_date = models.DateField(help_text="Later end of the likely range")
+    queue_position = models.PositiveIntegerField(null=True, blank=True, help_text="Orders ahead of this one waiting to start")
+    confidence_level = models.CharField(
+        max_length=10,
+        choices=[('HIGH', 'High'), ('MEDIUM', 'Medium'), ('LOW', 'Low')],
+    )
+    computed_at = models.DateTimeField()
+
+    def __str__(self):
+        return f"{self.order} - {self.estimated_date} to {self.range_end_date} ({self.confidence_level})"

@@ -31,7 +31,7 @@ class OrderRecordViewSet(viewsets.ReadOnlyModelViewSet):
         customer_name, origin, model, base, volts, status.
         """
         # Base queryset, filtering is handled by DjangoFilterBackend
-        queryset = OrderRecord.objects.all().prefetch_related('status_history')
+        queryset = OrderRecord.objects.all().select_related('estimate').prefetch_related('status_history')
         return queryset
 
 class StatusMetricsViewSet(viewsets.ReadOnlyModelViewSet):
