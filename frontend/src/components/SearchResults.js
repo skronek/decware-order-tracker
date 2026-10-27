@@ -129,6 +129,9 @@ export const SearchResults = ({ results, loading, error }) => {
               <Grid size={{ xs: 12, sm: 4 }}><Typography><strong>Order Date:</strong> {formatDate(order.order_date)}</Typography></Grid>
               <Grid size={{ xs: 12, sm: 4 }}><Typography><strong>Status:</strong> {formatStatus(order.status)}</Typography></Grid>
               <Grid size={{ xs: 12, sm: 4 }}><Typography><strong>Est. Completion:</strong> {formatEstCompletion(order.estimated_completion)}</Typography></Grid>
+              {order.estimated_completion?.explanation && (
+                <Grid size={{ xs: 12 }}><Typography variant="body2" color="text.secondary">{order.estimated_completion.explanation}</Typography></Grid>
+              )}
               {/* Add other relevant fields if needed, e.g., order.id */}
             </Grid>
             {/* TODO: Optionally display Status History here later */}

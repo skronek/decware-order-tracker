@@ -227,7 +227,9 @@ def estimate_orders(as_of=None):
         elapsed = (as_of - started) / DAY
         typical = max(1.0, model.build_typical_days - elapsed)
         late = max(typical, model.build_late_days - elapsed)
-        estimates.append(_estimate(order, as_of, typical, late, None, _confidence(model, typical, waiting=False)))
+        confidence = _confidence(model, typical, waiting=False)
+        estimates.append(_estimate(order, as_of, typical, late, None, confidence,
+                                   _building_explanation(status, model, elapsed)))
 
     if model.starts_per_week > 0:
         queue.sort(key=lambda o: (o.order_date, o.pk))
@@ -235,17 +237,39 @@ def estimate_orders(as_of=None):
             weeks = (position + 1) / model.starts_per_week
             typical = weeks * 7 + model.build_typical_days
             late = weeks / SLOW_RATE_FACTOR * 7 + model.build_late_days
-            estimates.append(_estimate(order, as_of, typical, late, position, _confidence(model, typical, waiting=True)))
+            confidence = _confidence(model, typical, waiting=True)
+            estimates.append(_estimate(order, as_of, typical, late, position, confidence,
+                                       _waiting_explanation(position, model, confidence)))
     return model, estimates
 
 
-def _estimate(order, as_of, typical_days, late_days, position, confidence):
+def _waiting_explanation(position, model, confidence):
+    text = (
+        f"Your order is #{position + 1:,} in the build queue. Decware has been starting about "
+        f"{model.starts_per_week:.0f} orders a week, and a build takes about {model.build_typical_days:.0f} days."
+    )
+    if confidence == 'LOW':
+        text += " This estimate will firm up as more recent progress is recorded."
+    return text
+
+
+def _building_explanation(status, model, elapsed_days):
+    label = dict(OrderRecord.STATUS_CHOICES).get(status, status).lower()
+    if elapsed_days > model.build_late_days:
+        return (f"Your order is being built ({label}) and is taking longer than the typical "
+                f"{model.build_typical_days:.0f} days.")
+    return (f"Your order is being built ({label}). Builds usually take about "
+            f"{model.build_typical_days:.0f} days from start to passing quality control.")
+
+
+def _estimate(order, as_of, typical_days, late_days, position, confidence, explanation):
     return OrderEstimate(
         order=order,
         estimated_date=(as_of + typical_days * DAY).date(),
         range_end_date=(as_of + late_days * DAY).date(),
         queue_position=position,
         confidence_level=confidence,
+        explanation=explanation,
         computed_at=as_of,
     )
 

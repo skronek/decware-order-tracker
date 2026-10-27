@@ -93,6 +93,7 @@ class OrderEstimate(models.Model):
         max_length=10,
         choices=[('HIGH', 'High'), ('MEDIUM', 'Medium'), ('LOW', 'Low')],
     )
+    explanation = models.TextField(blank=True, default='', help_text="Customer-facing sentence explaining the estimate")
     computed_at = models.DateTimeField()
 
     def __str__(self):

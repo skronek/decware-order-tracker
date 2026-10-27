@@ -65,6 +65,17 @@ describe('SearchResults', () => {
     expect(screen.getByText(`${start} – ${end}`, { exact: false })).toBeInTheDocument();
   });
 
+  it('renders the estimate explanation', () => {
+    const explanation = 'Your order is #2 in the build queue.';
+    const explainedOrder = {
+      ...mockOrder,
+      estimated_completion: { estimated_date: '2027-03-03', range_end_date: '2027-03-10', explanation },
+    };
+    render(<SearchResults results={[explainedOrder]} loading={false} error={null} />);
+
+    expect(screen.getByText(explanation)).toBeInTheDocument();
+  });
+
   it('renders order details when a single result is provided', () => {
     render(<SearchResults results={[mockOrder]} loading={false} error={null} />);
 

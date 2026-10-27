@@ -124,6 +124,7 @@ class OrderRecordSerializerTests(TestCase):
         est_completion = data['estimated_completion']
         self.assertEqual(est_completion['days_remaining'], expected_days_remaining)
         self.assertEqual(est_completion['confidence_level'], expected_confidence)
+        self.assertIn('explanation', est_completion)
 
     def test_estimated_completion_without_estimate(self):
         """Orders without a stored estimate (e.g. finished ones) have no estimated_completion."""

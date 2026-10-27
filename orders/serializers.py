@@ -37,6 +37,7 @@ class OrderRecordSerializer(serializers.ModelSerializer):
             'days_remaining': max(0, (estimate.estimated_date - timezone.localdate()).days),
             'queue_position': estimate.queue_position,
             'confidence_level': estimate.confidence_level,
+            'explanation': estimate.explanation,
         }
 
 

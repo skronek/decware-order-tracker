@@ -120,3 +120,31 @@ class EstimationTests(TestCase):
         result = backtest(self.now - 35 * DAY, now=self.now)
         self.assertEqual(result['actual_starts'], 10)
         self.assertAlmostEqual(result['predicted_starts'], 10, delta=1)
+
+    def test_explanations_match_the_numbers(self):
+        order = self._order('On bench', 'ON_BENCH', order_day=50)
+        self._history(order, None, 'NEW', self.first_run, observed=False)
+        self._history(order, 'NEW', 'ON_BENCH', self.now - 5 * DAY)
+
+        _, estimates = self._estimates()
+
+        self.assertEqual(
+            estimates['Waiting 1'].explanation,
+            "Your order is #2 in the build queue. Decware has been starting about 2 orders a week, "
+            "and a build takes about 14 days. This estimate will firm up as more recent progress is recorded.",
+        )
+        self.assertEqual(
+            estimates['On bench'].explanation,
+            "Your order is being built (on bench). Builds usually take about 14 days "
+            "from start to passing quality control.",
+        )
+
+    def test_overdue_build_says_so(self):
+        order = self._order('Slow', 'TESTING', order_day=50)
+        self._history(order, None, 'NEW', self.first_run, observed=False)
+        self._history(order, 'NEW', 'ON_BENCH', self.now - 30 * DAY)
+        self._history(order, 'ON_BENCH', 'TESTING', self.now - 10 * DAY)
+
+        _, estimates = self._estimates()
+
+        self.assertIn("taking longer than the typical 14 days", estimates['Slow'].explanation)
