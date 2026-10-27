@@ -46,7 +46,7 @@ describe('SearchForm', () => {
     fireEvent.click(screen.getByRole('button', { name: /Search/i }));
 
     // Check for error message
-    expect(screen.getByText(/Please fill in all five fields/i)).toBeInTheDocument();
+    expect(screen.getByText(/Please fill in customer name, origin, model, and volts/i)).toBeInTheDocument();
 
     // Check that onSearch was NOT called
     expect(mockOnSearch).not.toHaveBeenCalled();
@@ -74,7 +74,7 @@ describe('SearchForm', () => {
     fireEvent.click(screen.getByRole('button', { name: /Search/i }));
 
     // Check that the error message is NOT present
-    expect(screen.queryByText(/Please fill in all five fields/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Please fill in customer name, origin, model, and volts/i)).not.toBeInTheDocument();
 
     // Check that onSearch was called once with the correct data
     expect(mockOnSearch).toHaveBeenCalledTimes(1);

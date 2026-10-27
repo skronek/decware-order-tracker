@@ -83,7 +83,7 @@ describe('SearchPage Integration Tests', () => {
     expect(screen.getByText(/Test Customer/i)).toBeInTheDocument();
     expect(screen.getByText(/ZMA/i)).toBeInTheDocument();
     expect(screen.getByText(/In Progress/i)).toBeInTheDocument();
-    expect(screen.getByText(/14 days/i)).toBeInTheDocument();
+    expect(screen.getByText(new Date(mockOrderResponse[0].estimated_completion.estimated_date).toLocaleDateString())).toBeInTheDocument();
   });
   
   test('should display "Order not found" message when no results are returned', async () => {
@@ -124,7 +124,7 @@ describe('SearchPage Integration Tests', () => {
     fireEvent.click(screen.getByText(/Search/i));
     
     // Verify error message is displayed
-    expect(screen.getByText(/Please fill in all five fields/i)).toBeInTheDocument();
+    expect(screen.getByText(/Please fill in customer name, origin, model, and volts/i)).toBeInTheDocument();
     
     // Verify no API call was made
     expect(apiService.getOrder).not.toHaveBeenCalled();

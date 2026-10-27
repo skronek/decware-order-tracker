@@ -5,6 +5,9 @@ import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import { ThemeProvider } from '@mui/material/styles';
 import theme from '../../theme';
 
+// Use the real router; src/__mocks__/react-router-dom.js has no MemoryRouter or useParams
+jest.unmock('react-router-dom');
+
 // Wrap component with necessary providers for testing
 const renderWithProviders = (ui, { route = '/orders/123' } = {}) => {
   return render(

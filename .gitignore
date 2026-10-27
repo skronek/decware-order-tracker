@@ -48,3 +48,6 @@ simple_env_test.py
 test_date_parsing.py
 test_environment.py
 local_update.py
+
+# Test database created by test_settings.py
+test_db.sqlite3

@@ -85,7 +85,7 @@ describe('SearchResults', () => {
     expect(screen.getByText('STD')).toBeInTheDocument();
     expect(screen.getByText('120V')).toBeInTheDocument();
     expect(screen.getByText('In Progress')).toBeInTheDocument(); 
-    expect(screen.getByText('5 days')).toBeInTheDocument(); 
+    expect(screen.getByText(new Date(mockOrder.estimated_completion.estimated_date).toLocaleDateString())).toBeInTheDocument();
 
     expect(screen.getByRole('button', { name: /Save This Order/i })).toBeInTheDocument();
   });

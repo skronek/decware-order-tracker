@@ -17,7 +17,11 @@ const SearchPage = () => {
   // Define the handler function to be passed to SearchForm
   const handleSearch = async (formData) => {
     // The useApi hook's execute function takes the parameters for the apiService.getOrder
-    await performSearch(formData); 
+    try {
+      await performSearch(formData);
+    } catch {
+      // useApi stores the error, and SearchResults displays it
+    }
   };
 
   return (
