@@ -2,36 +2,14 @@ import React from 'react';
 import { render, screen, within } from '@testing-library/react';
 import { StatusHistoryTimeline } from '../StatusHistoryTimeline';
 
-describe('StatusHistoryTimeline', () => {
-  const mockStatusHistory = [
-    {
-      timestamp: '2025-04-01T10:00:00Z',
-      status: 'NEW',
-    },
-    {
-      timestamp: '2025-04-05T14:30:00Z',
-      status: 'IN_PROGRESS',
-    },
-    {
-      timestamp: '2025-04-10T09:15:00Z',
-      status: 'COMPLETED',
-    },
-  ];
+const day = (iso) => new Date(iso).toLocaleDateString();
 
-  // Unsorted history to test sorting
-  const mockUnsortedHistory = [
-    {
-      timestamp: '2025-04-05T14:30:00Z',
-      status: 'IN_PROGRESS',
-    },
-    {
-      timestamp: '2025-04-01T10:00:00Z',
-      status: 'NEW',
-    },
-    {
-      timestamp: '2025-04-10T09:15:00Z',
-      status: 'COMPLETED',
-    },
+describe('StatusHistoryTimeline', () => {
+  // Rows as the API returns them: newest first
+  const mockStatusHistory = [
+    { id: 3, previous_status: 'ON_BENCH', new_status: 'PASSED_QC', timestamp: '2025-04-10T15:00:00Z', is_observed: true },
+    { id: 2, previous_status: 'NEW', new_status: 'ON_BENCH', timestamp: '2025-04-05T15:00:00Z', is_observed: true },
+    { id: 1, previous_status: null, new_status: 'NEW', timestamp: '2025-04-01T15:00:00Z', is_observed: false },
   ];
 
   it('renders "No status history available" when no history is provided', () => {
@@ -39,56 +17,30 @@ describe('StatusHistoryTimeline', () => {
     expect(screen.getByText('No status history available.')).toBeInTheDocument();
   });
 
-  it('renders the timeline with status history', () => {
+  it('renders each status with its label, oldest first', () => {
     render(<StatusHistoryTimeline statusHistory={mockStatusHistory} />);
     expect(screen.getByText('Status History')).toBeInTheDocument();
-    expect(screen.getByText('NEW')).toBeInTheDocument();
-    expect(screen.getByText('IN_PROGRESS')).toBeInTheDocument();
-    expect(screen.getByText('COMPLETED')).toBeInTheDocument();
+
+    const items = screen.getAllByRole('listitem');
+    expect(within(items[0]).getByText('New')).toBeInTheDocument();
+    expect(within(items[1]).getByText('On Bench')).toBeInTheDocument();
+    expect(within(items[2]).getByText('Passed QC')).toBeInTheDocument();
   });
 
-  it('renders dates correctly', () => {
+  it('shows exact dates for observed changes and "First seen" for the rest', () => {
     render(<StatusHistoryTimeline statusHistory={mockStatusHistory} />);
-    expect(screen.getByText('4/1/2025')).toBeInTheDocument();
-    expect(screen.getByText('4/5/2025')).toBeInTheDocument();
-    expect(screen.getByText('4/10/2025')).toBeInTheDocument();
+    const items = screen.getAllByRole('listitem');
+    expect(items[0]).toHaveTextContent(`First seen ${day('2025-04-01T15:00:00Z')}`);
+    expect(items[1]).toHaveTextContent(day('2025-04-05T15:00:00Z'));
+    expect(items[1]).not.toHaveTextContent('First seen');
+    expect(items[2]).toHaveTextContent(day('2025-04-10T15:00:00Z'));
   });
 
-  it('sorts history chronologically', () => {
-    render(<StatusHistoryTimeline statusHistory={mockUnsortedHistory} />);
-    const timestamps = screen.getAllByText(/\d+\/\d+\/\d+/).map(el => el.textContent);
-    // Dates should be sorted: 4/1/2025, 4/5/2025, 4/10/2025
-    expect(timestamps[0]).toBe('4/1/2025');
-    expect(timestamps[1]).toBe('4/5/2025');
-    expect(timestamps[2]).toBe('4/10/2025');
-  });
-
-  it('renders timeline dots with correct colors based on status', () => {
+  it('colors timeline dots by stage', () => {
     render(<StatusHistoryTimeline statusHistory={mockStatusHistory} />);
-
-    // Find all timeline items (often listitem role)
-    const timelineItems = screen.getAllByRole('listitem');
-
-    // Assuming the order matches mockStatusHistory after sorting (which it does)
-
-    // Check first item (NEW)
-    const newItem = timelineItems[0];
-    expect(within(newItem).getByText('NEW')).toBeInTheDocument();
-    // Reverting to querySelector as getByRole('img') failed.
-    // This will trigger lint warnings but is necessary here.
-    const newDot = newItem.querySelector('.MuiTimelineDot-root');
-    expect(newDot).toHaveClass('MuiTimelineDot-filledPrimary');
-
-    // Check second item (IN_PROGRESS)
-    const progressItem = timelineItems[1];
-    expect(within(progressItem).getByText('IN_PROGRESS')).toBeInTheDocument();
-    const progressDot = progressItem.querySelector('.MuiTimelineDot-root');
-    expect(progressDot).toHaveClass('MuiTimelineDot-filledWarning'); // Updated class for MUI v7+
-
-    // Check third item (COMPLETED)
-    const completedItem = timelineItems[2];
-    expect(within(completedItem).getByText('COMPLETED')).toBeInTheDocument();
-    const completedDot = completedItem.querySelector('.MuiTimelineDot-root');
-    expect(completedDot).toHaveClass('MuiTimelineDot-filledSuccess'); // Updated class for MUI v7+
+    const dots = screen.getAllByRole('listitem').map((item) => item.querySelector('.MuiTimelineDot-root'));
+    expect(dots[0]).toHaveClass('MuiTimelineDot-filledPrimary');
+    expect(dots[1]).toHaveClass('MuiTimelineDot-filledWarning');
+    expect(dots[2]).toHaveClass('MuiTimelineDot-filledSuccess');
   });
 });

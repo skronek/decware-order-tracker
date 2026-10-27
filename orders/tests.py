@@ -153,7 +153,7 @@ class StatusHistorySerializerTests(TestCase):
         serializer = StatusHistorySerializer(instance=self.history)
         data = serializer.data
 
-        self.assertEqual(len(data), 5) # Expect 5 fields: id, order, previous_status, new_status, timestamp
+        self.assertEqual(len(data), 6) # Expect 6 fields: id, order, previous_status, new_status, timestamp, is_observed
         self.assertEqual(data['previous_status'], "NEW")
         self.assertEqual(data['new_status'], "PARTS_PULLED")
         self.assertEqual(data['timestamp'], self.timestamp.isoformat().replace('+00:00', 'Z'))

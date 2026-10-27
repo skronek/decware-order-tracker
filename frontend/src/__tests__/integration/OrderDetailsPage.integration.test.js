@@ -4,9 +4,11 @@ import OrderDetailsPage from '../../pages/OrderDetailsPage';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import { ThemeProvider } from '@mui/material/styles';
 import theme from '../../theme';
+import { useOrderDetails } from '../../hooks/useOrderDetails';
 
 // Use the real router; src/__mocks__/react-router-dom.js has no MemoryRouter or useParams
 jest.unmock('react-router-dom');
+jest.mock('../../hooks/useOrderDetails');
 
 // Wrap component with necessary providers for testing
 const renderWithProviders = (ui, { route = '/orders/123' } = {}) => {
@@ -21,22 +23,38 @@ const renderWithProviders = (ui, { route = '/orders/123' } = {}) => {
   );
 };
 
+const order = (id) => ({
+  id,
+  customer_name: 'Test Customer',
+  origin: 'WA',
+  model: 'ZMA',
+  base: '',
+  volts: '120V',
+  quantity: 1,
+  options: '',
+  status: 'ON_BENCH',
+  order_date: '2026-01-15T12:00:00Z',
+  removed_at: null,
+  status_history: [],
+  estimated_completion: null,
+});
+
 describe('OrderDetailsPage Integration Tests', () => {
-  test('should display order ID from URL parameter', () => {
-    // Render the OrderDetailsPage component with a valid order ID route
+  test('should load and display the order from the URL parameter', () => {
+    useOrderDetails.mockReturnValue({ orderDetails: order(123), loading: false, error: null });
     renderWithProviders(<OrderDetailsPage />);
-    
-    // Use more flexible queries
+
+    expect(useOrderDetails).toHaveBeenCalledWith('123');
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/Order Details/i);
-    expect(screen.getByText(/123/)).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'ZMA' })).toBeInTheDocument();
+    expect(screen.getByTestId('status-chip')).toHaveTextContent('On Bench');
   });
-  
-  test('should display different order ID when URL changes', () => {
-    // Render the OrderDetailsPage component with a non-existent order ID route
+
+  test('should load a different order when the URL changes', () => {
+    useOrderDetails.mockReturnValue({ orderDetails: null, loading: false, error: null });
     renderWithProviders(<OrderDetailsPage />, { route: '/orders/999' });
-    
-    // Use more flexible queries
-    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/Order Details/i);
-    expect(screen.getByText(/999/)).toBeInTheDocument();
+
+    expect(useOrderDetails).toHaveBeenCalledWith('999');
+    expect(screen.getByText('Order not found.')).toBeInTheDocument();
   });
 });

@@ -6,7 +6,7 @@ from .models import OrderRecord, OrderEstimate, StatusHistory, StatusMetrics
 class StatusHistorySerializer(serializers.ModelSerializer):
     class Meta:
         model = StatusHistory
-        fields = ['id', 'order', 'previous_status', 'new_status', 'timestamp']
+        fields = ['id', 'order', 'previous_status', 'new_status', 'timestamp', 'is_observed']
 
 
 class OrderRecordSerializer(serializers.ModelSerializer):

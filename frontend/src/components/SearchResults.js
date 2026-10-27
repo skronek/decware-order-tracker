@@ -1,43 +1,14 @@
 import React from 'react';
 import { Box, Paper, Typography, CircularProgress, Grid, Button } from '@mui/material';
 import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { getSavedOrderIds, saveOrderIds } from '../utils/storage'; // Import helpers
-
-// Helper to format status
-const formatStatus = (status) => {
-  const statusMap = {
-    NEW: 'New',
-    IN_PROGRESS: 'In Progress',
-    COMPLETED: 'Completed',
-    // Add other statuses if needed
-  };
-  return statusMap[status] || status;
-};
+import { formatStatus, formatEstCompletion } from '../utils/orderFormat';
 
 // Helper to format date
 const formatDate = (dateString) => {
   if (!dateString) return 'N/A';
   return new Date(dateString).toLocaleDateString();
-};
-
-// Helper to format estimated completion
-// Estimates are calendar dates (YYYY-MM-DD); parse them as local so they don't shift a day
-const formatDay = (day) => new Date(`${day}T00:00:00`).toLocaleDateString();
-
-const formatEstCompletion = (completionData) => {
-  if (!completionData) return 'N/A';
-  const { days_remaining, estimated_date, range_end_date } = completionData;
-  if (estimated_date && range_end_date && range_end_date !== estimated_date) {
-    return `${formatDay(estimated_date)} – ${formatDay(range_end_date)}`;
-  }
-  if (estimated_date) return formatDate(estimated_date);
-  else if (days_remaining !== undefined && days_remaining !== null) {
-      if (days_remaining < 0) return 'Overdue'; // Handle overdue case
-      if (days_remaining === 0) return 'Today';
-      if (days_remaining === 1) return 'Tomorrow';
-      return `${days_remaining} days`;
-  }
-  return 'N/A';
 };
 
 export const SearchResults = ({ results, loading, error }) => {
@@ -134,8 +105,10 @@ export const SearchResults = ({ results, loading, error }) => {
               )}
               {/* Add other relevant fields if needed, e.g., order.id */}
             </Grid>
-            {/* TODO: Optionally display Status History here later */}
-            <Box sx={{ mt: 2, textAlign: 'right' }}> 
+            <Box sx={{ mt: 2, display: 'flex', justifyContent: 'flex-end', gap: 1 }}>
+              <Button component={Link} to={`/orders/${order.id}`}>
+                View details
+              </Button>
               <Button 
                 variant="contained" 
                 onClick={() => handleSave(order)}

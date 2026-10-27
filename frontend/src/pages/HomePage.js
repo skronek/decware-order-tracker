@@ -1,19 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { Typography, Container, Box, Paper, Grid, CircularProgress, Divider, Button } from '@mui/material';
 import axios from 'axios';
+import { Link } from 'react-router-dom';
 import { getSavedOrderIds, removeOrderId } from '../utils/storage'; // Import storage helpers
+import { formatStatus, formatEstCompletion } from '../utils/orderFormat';
 
-// --- Helper functions (consider moving to a utils file later) ---
-// Helper to format status
-const formatStatus = (status) => {
-  const statusMap = {
-    NEW: 'New',
-    IN_PROGRESS: 'In Progress',
-    COMPLETED: 'Completed',
-  };
-  return statusMap[status] || status;
-};
-
+// --- Helper functions ---
 // Helper to format date
 const formatDate = (dateString) => {
   if (!dateString) return 'N/A';
@@ -21,26 +13,6 @@ const formatDate = (dateString) => {
   // Adjust for timezone offset to display in local time
   const utcDate = new Date(date.getTime() + date.getTimezoneOffset() * 60000);
   return `${utcDate.getMonth() + 1}/${utcDate.getDate()}/${utcDate.getFullYear()}`;
-};
-
-// Helper to format estimated completion
-// Estimates are calendar dates (YYYY-MM-DD); parse them as local so they don't shift a day
-const formatDay = (day) => new Date(`${day}T00:00:00`).toLocaleDateString();
-
-const formatEstCompletion = (completionData) => {
-  if (!completionData) return 'N/A';
-  const { days_remaining, estimated_date, range_end_date } = completionData;
-  if (estimated_date && range_end_date && range_end_date !== estimated_date) {
-    return `${formatDay(estimated_date)} – ${formatDay(range_end_date)}`;
-  }
-  if (estimated_date) return formatDate(estimated_date);
-  else if (days_remaining !== undefined && days_remaining !== null) {
-    if (days_remaining < 0) return 'Overdue';
-    if (days_remaining === 0) return 'Today';
-    if (days_remaining === 1) return 'Tomorrow';
-    return `${days_remaining} days`;
-  }
-  return 'N/A';
 };
 // --- End Helper Functions ---
 
@@ -159,7 +131,10 @@ const HomePage = () => {
                     {order.estimated_completion?.explanation && (
                       <Grid item xs={12}><Typography variant="body2" color="text.secondary">{order.estimated_completion.explanation}</Typography></Grid>
                     )}
-                    <Grid item xs={12} sx={{ display: 'flex', justifyContent: 'flex-end', mt: 2 }}>
+                    <Grid item xs={12} sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1, mt: 2 }}>
+                      <Button component={Link} to={`/orders/${order.id}`}>
+                        View details
+                      </Button>
                       <Button 
                         variant="outlined" 
                         color="error" 

@@ -23,11 +23,19 @@ class StatusHistorySerializerTests(TestCase):
         serializer = StatusHistorySerializer(instance=self.history_entry)
         data = serializer.data
 
-        self.assertEqual(len(data.keys()), 5) # Expecting 5 fields: id, order, previous_status, new_status, timestamp
+        self.assertEqual(len(data.keys()), 6) # Expecting 6 fields: id, order, previous_status, new_status, timestamp, is_observed
         self.assertEqual(data['previous_status'], "INITIAL")
         self.assertEqual(data['new_status'], "PROCESSING")
         # Compare timestamp after formatting as serializer does
         self.assertEqual(data['timestamp'], self.timestamp.isoformat().replace('+00:00', 'Z'))
+        self.assertIs(data['is_observed'], True)
+
+    def test_serializes_unobserved_change(self):
+        """Changes whose timestamp isn't when they really happened are flagged."""
+        entry = StatusHistory.objects.create(
+            order=self.order, previous_status="PROCESSING", new_status="DONE", is_observed=False
+        )
+        self.assertIs(StatusHistorySerializer(instance=entry).data['is_observed'], False)
 
 class OrderRecordSerializerTests(TestCase):
     """Tests for the OrderRecordSerializer."""

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, Link } from 'react-router-dom';
 import {
+  Alert,
   Box,
   Paper,
   Typography,
@@ -13,11 +14,58 @@ import Grid from '@mui/material/Grid'; // Correct import path for MUI v7+ Grid
 import { useOrderDetails } from '../hooks/useOrderDetails';
 import { StatusHistoryTimeline } from './StatusHistoryTimeline';
 import { getSavedOrderIds, saveOrderIds } from '../utils/storage';
+import { formatStatus, statusColor, isFinished, formatEstCompletion, formatConfidence } from '../utils/orderFormat';
 
-const formatDate = (dateString) => {
-  const date = new Date(dateString);
-  const utcDate = new Date(date.getTime() + date.getTimezoneOffset() * 60000);
-  return `${utcDate.getMonth() + 1}/${utcDate.getDate()}/${utcDate.getFullYear()}`;
+const formatDate = (dateString) => (dateString ? new Date(dateString).toLocaleDateString() : 'N/A');
+
+// A label/value pair in the details grid
+const Field = ({ label, children, testId, sm = 4 }) => (
+  <Grid size={{ xs: 12, sm }}>
+    <Typography variant="subtitle2" color="text.secondary">
+      {label}
+    </Typography>
+    <Typography variant="body1" gutterBottom data-testid={testId}>
+      {children}
+    </Typography>
+  </Grid>
+);
+
+const EstimateSection = ({ order }) => {
+  const estimate = order.estimated_completion;
+
+  if (isFinished(order.status)) {
+    return <Typography>This order has passed quality control.</Typography>;
+  }
+  if (order.removed_at) {
+    // Explained by the notice at the top of the page
+    return <Typography color="text.secondary">No longer estimated.</Typography>;
+  }
+  if (!estimate) {
+    return <Typography color="text.secondary">No estimate yet.</Typography>;
+  }
+
+  return (
+    <Grid container spacing={2}>
+      <Field label="Estimated to pass QC" testId="completion-date">
+        {formatEstCompletion(estimate)}
+      </Field>
+      {estimate.queue_position !== null && estimate.queue_position !== undefined && (
+        <Field label="Place in build queue" testId="queue-position">
+          #{(estimate.queue_position + 1).toLocaleString()}
+        </Field>
+      )}
+      <Field label="Confidence" testId="confidence-level">
+        {formatConfidence(estimate.confidence_level)}
+      </Field>
+      {estimate.explanation && (
+        <Grid size={{ xs: 12 }}>
+          <Typography variant="body2" color="text.secondary">
+            {estimate.explanation}
+          </Typography>
+        </Grid>
+      )}
+    </Grid>
+  );
 };
 
 export const OrderDetails = () => {
@@ -34,18 +82,14 @@ export const OrderDetails = () => {
   const handleSave = () => {
     const savedIds = getSavedOrderIds();
     if (!savedIds.includes(orderId)) {
-      const newSavedIds = [...savedIds, orderId];
-      saveOrderIds(newSavedIds);
-      console.log('Saved order:', orderId);
+      saveOrderIds([...savedIds, orderId]);
     }
     setIsSaved(true);
   };
 
   const handleUnsave = () => {
     const savedIds = getSavedOrderIds();
-    const newSavedIds = savedIds.filter(id => id !== orderId);
-    saveOrderIds(newSavedIds);
-    console.log('Unsaved order:', orderId);
+    saveOrderIds(savedIds.filter(id => id !== orderId));
     setIsSaved(false);
   };
 
@@ -79,136 +123,68 @@ export const OrderDetails = () => {
     );
   }
 
+  const order = orderDetails;
+
   return (
-    <Box sx={{ p: 3 }}>
+    <Box sx={{ py: 3 }}>
+      {order.removed_at && (
+        <Alert severity="info" sx={{ mb: 3 }} data-testid="removed-notice">
+          This order dropped off Decware's order list on {formatDate(order.removed_at)}, which usually
+          means it has been finished.
+        </Alert>
+      )}
+
       <Paper sx={{ p: 3 }} data-testid="order-details-main">
-        <Grid container spacing={3}>
-          {/* Customer Information */}
-          <Grid size={{ xs: 12, sm: 6 }} container justifyContent="space-between" alignItems="center">
-            <Typography variant="h5" gutterBottom>
-              Customer Information
+        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+          <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+            <Typography variant="h5" component="h2">
+              {order.model}
             </Typography>
-            <Button
-              variant="contained"
-              onClick={isSaved ? handleUnsave : handleSave}
-              data-testid="save-button"
-              sx={{ 
-                mb: { xs: 2, sm: 0 },
-                bgcolor: '#6c757d',
-                '&:hover': {
-                  bgcolor: '#5a6268',
-                }
-              }}
-            >
-              {isSaved ? 'Unsave Order' : 'Save Order'}
-            </Button>
-          </Grid>
-          <Grid size={{ xs: 12, sm: 6 }}>
-            <Grid container spacing={2}>
-              <Grid size={{ xs: 12, sm: 6 }}>
-                <Typography variant="subtitle2" color="text.secondary">
-                  Name
-                </Typography>
-                <Typography variant="body1" gutterBottom>
-                  {orderDetails.customerName}
-                </Typography>
-              </Grid>
-              <Grid size={{ xs: 12, sm: 6 }}>
-                <Typography variant="subtitle2" color="text.secondary">
-                  Order Date
-                </Typography>
-                <Typography variant="body1" gutterBottom data-testid="order-date">
-                  {formatDate(orderDetails.orderDate)}
-                </Typography>
-              </Grid>
-            </Grid>
-          </Grid>
+            <Chip label={formatStatus(order.status)} color={statusColor(order.status)} data-testid="status-chip" />
+          </Box>
+          <Button
+            variant="contained"
+            onClick={isSaved ? handleUnsave : handleSave}
+            data-testid="save-button"
+            sx={{
+              bgcolor: '#6c757d',
+              '&:hover': {
+                bgcolor: '#5a6268',
+              }
+            }}
+          >
+            {isSaved ? 'Unsave Order' : 'Save Order'}
+          </Button>
+        </Box>
 
-          <Grid size={{ xs: 12, sm: 6 }}>
-            <Divider />
-          </Grid>
-
-          {/* Product Information */}
-          <Grid size={{ xs: 12, sm: 6 }}>
-            <Typography variant="h5" gutterBottom>
-              Product Information
-            </Typography>
-            <Grid container spacing={2}>
-              <Grid size={{ xs: 12, sm: 6 }}>
-                <Typography variant="subtitle2" color="text.secondary">
-                  Model
-                </Typography>
-                <Typography variant="body1" gutterBottom>
-                  {orderDetails.model}
-                </Typography>
-              </Grid>
-              <Grid size={{ xs: 12, sm: 6 }}>
-                <Typography variant="subtitle2" color="text.secondary">
-                  Status
-                </Typography>
-                <Chip
-                  label={orderDetails.status}
-                  color={
-                    orderDetails.status === 'NEW'
-                      ? 'primary'
-                      : orderDetails.status === 'IN_PROGRESS'
-                      ? 'warning'
-                      : 'success'
-                  }
-                  sx={{ mt: 1 }}
-                  data-testid="status-chip"
-                />
-              </Grid>
-            </Grid>
-          </Grid>
-
-          <Grid size={{ xs: 12, sm: 6 }}>
-            <Divider />
-          </Grid>
-
-          {/* Estimated Completion */}
-          <Grid size={{ xs: 12, sm: 6 }}>
-            <Typography variant="h5" gutterBottom>
-              Estimated Completion
-            </Typography>
-            <Grid container spacing={2}>
-              <Grid size={{ xs: 12, sm: 6 }}>
-                <Typography variant="subtitle2" color="text.secondary">
-                  Days Remaining
-                </Typography>
-                <Typography variant="body1" gutterBottom>
-                  {orderDetails.estimatedCompletion?.daysRemaining || 'N/A'}
-                </Typography>
-              </Grid>
-              <Grid size={{ xs: 12, sm: 6 }}>
-                <Typography variant="subtitle2" color="text.secondary">
-                  Estimated Completion Date
-                </Typography>
-                <Typography variant="body1" gutterBottom data-testid="completion-date">
-                  {orderDetails.estimatedCompletion?.date
-                    ? formatDate(orderDetails.estimatedCompletion.date)
-                    : 'N/A'}
-                </Typography>
-              </Grid>
-              <Grid size={{ xs: 12, sm: 6 }}>
-                <Typography variant="subtitle2" color="text.secondary">
-                  Confidence Level
-                </Typography>
-                <Typography variant="body1" gutterBottom data-testid="confidence-level">
-                  {orderDetails.estimatedCompletion?.confidenceLevel
-                    ? `${(orderDetails.estimatedCompletion.confidenceLevel * 100).toFixed(0)}%`
-                    : 'N/A'}
-                </Typography>
-              </Grid>
-            </Grid>
-          </Grid>
+        <Grid container spacing={2}>
+          <Field label="Customer">{order.customer_name}</Field>
+          <Field label="Origin">{order.origin}</Field>
+          <Field label="Order Date" testId="order-date">{formatDate(order.order_date)}</Field>
+          <Field label="Model">{order.model}</Field>
+          <Field label="Base">{order.base || 'N/A'}</Field>
+          <Field label="Volts">{order.volts}</Field>
+          <Field label="Quantity">{order.quantity}</Field>
+          <Field label="Options" sm={8}>{order.options || 'None'}</Field>
         </Grid>
+
+        <Divider sx={{ my: 3 }} />
+
+        <Box data-testid="estimate">
+          <Typography variant="h6" gutterBottom>
+            Estimated Completion
+          </Typography>
+          <EstimateSection order={order} />
+        </Box>
       </Paper>
 
-      {/* Status History Timeline */}
-      <Paper sx={{ p: 3, mt: 3 }} data-testid="status-history-timeline">
-        <StatusHistoryTimeline statusHistory={orderDetails.statusHistory} />
-      </Paper>
+      <StatusHistoryTimeline statusHistory={order.status_history} />
+
+      <Box sx={{ mt: 3 }}>
+        <Button component={Link} to="/search">
+          Back to search
+        </Button>
+      </Box>
     </Box>
   );
 };

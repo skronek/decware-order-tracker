@@ -21,7 +21,7 @@ const mockOrderResponse = [
     base: 'Wood',
     volts: '120V',
     options: 'Standard',
-    status: 'IN_PROGRESS',
+    status: 'ON_BENCH',
     order_date: '2023-01-15T00:00:00Z',
     estimated_completion: {
       days_remaining: 14,
@@ -82,7 +82,7 @@ describe('SearchPage Integration Tests', () => {
     expect(screen.getByText(/Order Details/i)).toBeInTheDocument();
     expect(screen.getByText(/Test Customer/i)).toBeInTheDocument();
     expect(screen.getByText(/ZMA/i)).toBeInTheDocument();
-    expect(screen.getByText(/In Progress/i)).toBeInTheDocument();
+    expect(screen.getByText('On Bench')).toBeInTheDocument();
     expect(screen.getByText(new Date(mockOrderResponse[0].estimated_completion.estimated_date).toLocaleDateString())).toBeInTheDocument();
   });
   

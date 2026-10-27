@@ -9,11 +9,13 @@ import {
   TimelineOppositeContent,
 } from '@mui/lab';
 import { Typography, Paper } from '@mui/material';
+import { formatStatus, statusColor } from '../utils/orderFormat';
 
-const formatDate = (dateString) => {
-  const date = new Date(dateString);
-  const utcDate = new Date(date.getTime() + date.getTimezoneOffset() * 60000);
-  return `${utcDate.getMonth() + 1}/${utcDate.getDate()}/${utcDate.getFullYear()}`;
+// Unobserved rows (an order's first status, or a change spotted after missed scraper
+// runs) weren't timestamped when the change happened, only when it was first noticed
+const formatWhen = (item) => {
+  const date = new Date(item.timestamp).toLocaleDateString();
+  return item.is_observed === false ? `First seen ${date}` : date;
 };
 
 export const StatusHistoryTimeline = ({ statusHistory }) => {
@@ -21,35 +23,27 @@ export const StatusHistoryTimeline = ({ statusHistory }) => {
     return <Typography>No status history available.</Typography>;
   }
 
-  // Sort history chronologically if not already sorted
+  // The API returns newest first; show the order's progress oldest first
   const sortedHistory = [...statusHistory].sort(
     (a, b) => new Date(a.timestamp) - new Date(b.timestamp)
   );
 
   return (
-    <Paper sx={{ p: 3, mt: 3 }}>
+    <Paper sx={{ p: 3, mt: 3 }} data-testid="status-history-timeline">
       <Typography variant="h6" gutterBottom>
         Status History
       </Typography>
       <Timeline position="alternate">
         {sortedHistory.map((item, index) => (
-          <TimelineItem key={index}>
+          <TimelineItem key={item.id ?? index}>
             <TimelineOppositeContent color="text.secondary">
-              {formatDate(item.timestamp)}
+              {formatWhen(item)}
             </TimelineOppositeContent>
             <TimelineSeparator>
-              <TimelineDot
-                color={
-                  item.status === 'NEW'
-                    ? 'primary'
-                    : item.status === 'IN_PROGRESS'
-                    ? 'warning'
-                    : 'success'
-                }
-              />
+              <TimelineDot color={statusColor(item.new_status)} />
               {index < sortedHistory.length - 1 && <TimelineConnector />}
             </TimelineSeparator>
-            <TimelineContent>{item.status}</TimelineContent>
+            <TimelineContent>{formatStatus(item.new_status)}</TimelineContent>
           </TimelineItem>
         ))}
       </Timeline>

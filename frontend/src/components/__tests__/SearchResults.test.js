@@ -18,7 +18,7 @@ describe('SearchResults', () => {
     base: 'STD',
     volts: '120V',
     order_date: '2023-01-15T10:00:00Z',
-    status: 'IN_PROGRESS',
+    status: 'ON_BENCH',
     estimated_completion: {
       days_remaining: 5,
       estimated_date: '2023-01-20T10:00:00Z',
@@ -84,10 +84,15 @@ describe('SearchResults', () => {
     expect(screen.getByText('USA')).toBeInTheDocument();
     expect(screen.getByText('STD')).toBeInTheDocument();
     expect(screen.getByText('120V')).toBeInTheDocument();
-    expect(screen.getByText('In Progress')).toBeInTheDocument(); 
+    expect(screen.getByText('On Bench')).toBeInTheDocument();
     expect(screen.getByText(new Date(mockOrder.estimated_completion.estimated_date).toLocaleDateString())).toBeInTheDocument();
 
     expect(screen.getByRole('button', { name: /Save This Order/i })).toBeInTheDocument();
+  });
+
+  it('links to the order details page', () => {
+    render(<SearchResults results={[mockOrder]} loading={false} error={null} />);
+    expect(screen.getByRole('link', { name: /View details/i })).toHaveAttribute('href', '/orders/123');
   });
 
   it('renders "Internal error" message when multiple results are provided', () => {
