@@ -92,28 +92,22 @@ class DecwareOrderScraper:
             
         try:
             if is_heroku:
-                # On Heroku, use the Chrome binary from the Chrome for Testing buildpack
-                chrome_bin = os.environ.get('GOOGLE_CHROME_BIN', '/app/.apt/opt/google/chrome/chrome')
+                # The Chrome for Testing buildpack puts a version-matched `chrome` and
+                # `chromedriver` on PATH. Both must come from the buildpack: if either is
+                # missing, Selenium Manager downloads the latest one at runtime, which
+                # won't match the other.
+                chrome_bin = os.environ.get('GOOGLE_CHROME_BIN') or shutil.which('chrome')
+                chrome_driver_path = os.environ.get('CHROMEDRIVER_PATH') or shutil.which('chromedriver')
+                logger.info(f"Chrome binary: {chrome_bin}, ChromeDriver: {chrome_driver_path}")
+
+                if not chrome_bin or not chrome_driver_path:
+                    logger.error("Chrome or ChromeDriver not found on PATH; is the chrome-for-testing buildpack installed?")
+                    return None
+
                 chrome_options.binary_location = chrome_bin
-                
-                # Use ChromeDriver from the buildpack
-                chrome_driver_path = os.environ.get('CHROMEDRIVER_PATH', '/app/.chromedriver/bin/chromedriver')
-                
-                # Log environment variables for debugging
-                logger.info(f"GOOGLE_CHROME_BIN: {os.environ.get('GOOGLE_CHROME_BIN', 'Not set')}")
-                logger.info(f"CHROMEDRIVER_PATH: {os.environ.get('CHROMEDRIVER_PATH', 'Not set')}")
-                
-                # Use WebDriver Manager to handle driver setup
-                from selenium.webdriver.chrome.service import Service
-                
-                if os.path.exists(chrome_driver_path):
-                    service = Service(executable_path=chrome_driver_path)
-                    driver = webdriver.Chrome(service=service, options=chrome_options)
-                    logger.info(f"Using Heroku Chrome with ChromeDriver at {chrome_driver_path}")
-                else:
-                    # If ChromeDriver not found at expected path, let Selenium find it
-                    driver = webdriver.Chrome(options=chrome_options)
-                    logger.info("Using Heroku Chrome with auto-detected ChromeDriver")
+                service = Service(executable_path=chrome_driver_path)
+                driver = webdriver.Chrome(service=service, options=chrome_options)
+                logger.info(f"Using Chrome {driver.capabilities.get('browserVersion')}")
             else:
                 # Local development
                 driver = webdriver.Chrome(options=chrome_options)
