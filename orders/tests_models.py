@@ -1,3 +1,6 @@
+import datetime
+import importlib
+
 from django.test import TestCase
 from django.utils import timezone
 from django.core.exceptions import ValidationError
@@ -91,3 +94,38 @@ class StatusHistoryModelTests(TestCase):
         )
         self.assertIsInstance(implicit_null_entry, StatusHistory)
         self.assertIsNone(implicit_null_entry.previous_status)
+
+
+class LifecycleBackfillMigrationTests(TestCase):
+    """Tests the 0008 backfill that reconstructs past scraper runs from timestamps."""
+
+    def _at(self, *args):
+        return timezone.make_aware(datetime.datetime(*args))
+
+    def test_backfill(self):
+        from django.apps import apps
+        backfill = importlib.import_module('orders.migrations.0008_backfill_order_lifecycle').backfill
+
+        # Runs on Jan 1, Jan 2, then a gap until Mar 1
+        kept = OrderRecord.objects.create(customer_name='Kept', origin='', model='M', volts='', status='ON_BENCH')
+        early = OrderRecord.objects.create(customer_name='Early', origin='', model='M', volts='', status='NEW')
+        gap = OrderRecord.objects.create(customer_name='Gap', origin='', model='M', volts='', status='NEW')
+        OrderRecord.objects.filter(pk=kept.pk).update(time_updated=self._at(2024, 3, 1, 6))
+        OrderRecord.objects.filter(pk=early.pk).update(time_updated=self._at(2024, 1, 1, 6))
+        OrderRecord.objects.filter(pk=gap.pk).update(time_updated=self._at(2024, 1, 2, 6))
+
+        initial = StatusHistory.objects.create(order=kept, new_status='NEW', timestamp=self._at(2024, 1, 1, 6))
+        daily = StatusHistory.objects.create(order=kept, previous_status='NEW', new_status='PARTS_PULLED', timestamp=self._at(2024, 1, 2, 6))
+        after_gap = StatusHistory.objects.create(order=kept, previous_status='PARTS_PULLED', new_status='ON_BENCH', timestamp=self._at(2024, 3, 1, 6))
+
+        backfill(apps, None)
+
+        for obj in (kept, early, gap, initial, daily, after_gap):
+            obj.refresh_from_db()
+        self.assertEqual(kept.last_seen_at, self._at(2024, 3, 1, 6))
+        self.assertIsNone(kept.removed_at)
+        self.assertEqual(early.removed_at, self._at(2024, 1, 2, 6))  # Next day's run
+        self.assertEqual(gap.removed_at, self._at(2024, 3, 1, 6))  # First run after the gap
+        self.assertFalse(initial.is_observed)
+        self.assertTrue(daily.is_observed)
+        self.assertFalse(after_gap.is_observed)

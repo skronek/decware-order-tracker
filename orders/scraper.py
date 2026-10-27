@@ -16,6 +16,7 @@ import shutil
 import requests
 from django.conf import settings
 from django.db import transaction
+from django.db.models import Max
 from django.core.exceptions import ObjectDoesNotExist, ValidationError
 from django.utils import timezone
 from selenium import webdriver
@@ -27,6 +28,11 @@ from selenium.webdriver.chrome.service import Service
 from selenium.common.exceptions import TimeoutException, NoSuchElementException
 
 from .models import OrderRecord, StatusHistory
+
+# Status changes are only counted as observed if the previous successful run was this recent
+MAX_OBSERVED_RUN_GAP = datetime.timedelta(days=3)
+# Don't mark orders removed unless the CSV contained at least this share of active orders
+MIN_SEEN_FRACTION_FOR_REMOVALS = 0.5
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -644,7 +650,16 @@ class DecwareOrderScraper:
         Returns the number of orders processed.
         """
         logger.info("Starting database update within transaction...")
+        run_time = timezone.now()
+        # A status change is only timestamped accurately if the previous run was recent;
+        # after missed runs we only know it happened sometime during the gap.
+        previous_run = OrderRecord.objects.aggregate(Max('last_seen_at'))['last_seen_at__max']
+        changes_observed = previous_run is not None and run_time - previous_run <= MAX_OBSERVED_RUN_GAP
+        if not changes_observed:
+            logger.warning(f"Previous successful run was {previous_run}; status changes this run are marked unobserved")
+
         orders_processed = 0
+        seen_ids = set()
         for i, order_data in enumerate(orders):
             try:
                 # Define the lookup fields for the composite key
@@ -660,7 +675,9 @@ class DecwareOrderScraper:
                 defaults = {
                     'quantity': order_data.get('quantity', 1),
                     'options': order_data.get('options', ''),
-                    'status': order_data.get('status', 'NEW') # Already normalized
+                    'status': order_data.get('status', 'NEW'), # Already normalized
+                    'last_seen_at': run_time,
+                    'removed_at': None, # Back on the list if it had dropped off
                 }
                 
                 # Handle order_date separately to ensure it's never null
@@ -691,16 +708,19 @@ class DecwareOrderScraper:
                         order=order,
                         previous_status=old_order_status,
                         new_status=defaults['status'],
-                        timestamp=timezone.now()
+                        timestamp=run_time,
+                        is_observed=changes_observed,
                     )
                 elif created:
                     StatusHistory.objects.create(
                         order=order,
                         previous_status=None, # Initial status has no previous
                         new_status=defaults['status'],
-                        timestamp=timezone.now() # Or use order.order_date if more appropriate? Using now() for consistency.
+                        timestamp=run_time,
+                        is_observed=False, # We don't know how long it was already in this status
                     )
 
+                seen_ids.add(order.pk)
                 orders_processed += 1
 
             except Exception as e:
@@ -710,7 +730,26 @@ class DecwareOrderScraper:
                 continue
 
         logger.info(f"Processed {orders_processed}/{len(orders)} orders in CSV")
+        self._mark_removed_orders(seen_ids, run_time)
         return orders_processed
+
+    def _mark_removed_orders(self, seen_ids, run_time):
+        """
+        Marks orders that are no longer in the CSV as removed (finished).
+        Skipped when this run saw too few of the active orders, since that points
+        to a partial download rather than a mass completion.
+        """
+        active = OrderRecord.objects.filter(removed_at__isnull=True)
+        active_count = active.count()
+        if active_count and len(seen_ids) < active_count * MIN_SEEN_FRACTION_FOR_REMOVALS:
+            logger.error(
+                f"Only {len(seen_ids)} of {active_count} active orders were in the CSV; "
+                "not marking any orders as removed"
+            )
+            return 0
+        removed = active.exclude(pk__in=seen_ids).update(removed_at=run_time)
+        logger.info(f"Marked {removed} orders no longer in the CSV as removed")
+        return removed
 
     def run(self) -> bool:
         """

@@ -31,6 +31,8 @@ class OrderRecord(models.Model):
     order_date = models.DateTimeField(default=timezone.now) # Date the order was placed (from CSV)
     time_created = models.DateTimeField(default=timezone.now)
     time_updated = models.DateTimeField(auto_now=True)
+    last_seen_at = models.DateTimeField(null=True, blank=True)  # Last scraper run that found this order in the CSV
+    removed_at = models.DateTimeField(null=True, blank=True)  # First scraper run that no longer found it (order finished)
 
     class Meta:
         indexes = [
@@ -48,6 +50,10 @@ class StatusHistory(models.Model):
     previous_status = models.CharField(max_length=50, choices=OrderRecord.STATUS_CHOICES, null=True, blank=True) # Allow null for initial status
     new_status = models.CharField(max_length=50, choices=OrderRecord.STATUS_CHOICES)
     timestamp = models.DateTimeField(default=timezone.now)
+    # False when the timestamp isn't when the change really happened: the first row for
+    # an order (it may have been in that status for a while), or a change spotted after
+    # the scraper missed days of runs.
+    is_observed = models.BooleanField(default=True)
 
     class Meta:
         indexes = [

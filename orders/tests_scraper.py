@@ -462,6 +462,81 @@ class ScraperUpdateDatabaseTests(TestCase):
         self.assertIn("Error processing order", mock_logger_error.call_args[0][0])
         self.assertIn("'customer_name': 'Bad Cust'", str(mock_logger_error.call_args[0][0]))
 
+
+class ScraperLifecycleTrackingTests(TestCase):
+    """Tests last-seen/removed tracking and observed status changes in update_database."""
+
+    def setUp(self):
+        with patch('orders.scraper.DecwareOrderScraper._init_driver', return_value=None):
+            self.scraper = DecwareOrderScraper()
+        self.scraper.cleanup = lambda: None
+
+    def _create_order(self, name, status='NEW', last_seen_days_ago=1):
+        return OrderRecord.objects.create(
+            customer_name=name, origin='Web', model='M', base='B', volts='120V', status=status,
+            order_date=timezone.make_aware(datetime.datetime(2023, 1, 1)),
+            last_seen_at=timezone.now() - datetime.timedelta(days=last_seen_days_ago),
+        )
+
+    def _row(self, name, status='NEW'):
+        return {
+            'customer_name': name, 'origin': 'Web', 'model': 'M', 'base': 'B', 'volts': '120V',
+            'quantity': 1, 'options': '', 'status': status,
+            'order_date': timezone.make_aware(datetime.datetime(2023, 1, 1)),
+        }
+
+    def test_orders_in_csv_get_last_seen_and_missing_orders_get_removed(self):
+        kept = self._create_order('Kept')
+        gone = self._create_order('Gone')
+
+        self.scraper.update_database([self._row('Kept')])
+
+        kept.refresh_from_db()
+        gone.refresh_from_db()
+        self.assertGreater(kept.last_seen_at, timezone.now() - datetime.timedelta(minutes=1))
+        self.assertIsNone(kept.removed_at)
+        self.assertIsNotNone(gone.removed_at)
+        self.assertLess(gone.last_seen_at, gone.removed_at)
+
+    def test_reappearing_order_is_no_longer_removed(self):
+        order = self._create_order('Back')
+        order.removed_at = timezone.now() - datetime.timedelta(days=1)
+        order.save()
+
+        self.scraper.update_database([self._row('Back')])
+
+        order.refresh_from_db()
+        self.assertIsNone(order.removed_at)
+
+    def test_partial_csv_does_not_mark_removals(self):
+        for i in range(4):
+            self._create_order(f'Active {i}')
+
+        self.scraper.update_database([self._row('Active 0')])
+
+        self.assertFalse(OrderRecord.objects.filter(removed_at__isnull=False).exists())
+
+    def test_status_change_after_recent_run_is_observed(self):
+        self._create_order('Steady', last_seen_days_ago=1)
+
+        self.scraper.update_database([self._row('Steady', status='ON_BENCH')])
+
+        change = StatusHistory.objects.get(previous_status='NEW')
+        self.assertTrue(change.is_observed)
+
+    def test_status_change_after_missed_runs_is_unobserved(self):
+        self._create_order('Gap', last_seen_days_ago=30)
+
+        self.scraper.update_database([self._row('Gap', status='ON_BENCH')])
+
+        change = StatusHistory.objects.get(previous_status='NEW')
+        self.assertFalse(change.is_observed)
+
+    def test_initial_status_is_unobserved(self):
+        self.scraper.update_database([self._row('Brand New')])
+
+        self.assertFalse(StatusHistory.objects.get().is_observed)
+
 # ==================================
 # Integration Tests (Mocking Download)
 # ==================================
