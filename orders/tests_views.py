@@ -34,6 +34,17 @@ class OrderRecordViewSetTests(APITestCase):
         response = self.client.get(self.non_existent_url)
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
 
+    def test_retrieve_order_without_trailing_slash_redirects(self):
+        """A detail URL missing its trailing slash redirects to the API, not the React page."""
+        response = self.client.get(self.detail_url.rstrip('/'))
+        self.assertEqual(response.status_code, status.HTTP_301_MOVED_PERMANENTLY)
+        self.assertEqual(response['Location'], self.detail_url)
+
+    def test_unknown_api_path_returns_404(self):
+        """Unknown /api/ paths return 404 instead of falling through to the React page."""
+        response = self.client.get('/api/orders/1/')
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
     def test_filter_by_customer_name(self):
         """Ensure filtering by customer_name works."""
         filter_url = f"{self.list_url}?customer_name={self.order1.customer_name}"

@@ -32,7 +32,9 @@ urlpatterns = [
 if settings.DEBUG:
     urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
 
-# Serve React frontend - catch all other routes and let React handle routing
+# Serve React frontend - catch all other routes and let React handle routing.
+# API and admin paths are excluded so a mistyped or slash-less API URL gets a
+# 404 or APPEND_SLASH redirect instead of the React page.
 urlpatterns += [
-    re_path(r'^.*', views.index, name='index'),
+    re_path(r'^(?!api/|api-auth/|api-docs/|admin/).*', views.index, name='index'),
 ]

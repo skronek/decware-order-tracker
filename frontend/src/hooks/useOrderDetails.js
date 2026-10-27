@@ -11,7 +11,7 @@ export const useOrderDetails = (orderId) => {
       if (!orderId) return;
       
       try {
-        const response = await fetchDetails(`/orders/${orderId}`);
+        const response = await fetchDetails(`/orders/orders/${orderId}/`);
         setOrderDetails(response.data);
       } catch (err) {
         console.error('Failed to fetch order details:', err);
