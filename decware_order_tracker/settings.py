@@ -206,3 +206,12 @@ CORS_URLS_REGEX = r'^/api/.*$'  # Only allow CORS for API endpoints
 if 'HEROKU' in os.environ:
     import django_heroku
     django_heroku.settings(locals())
+
+# HTTPS in production: keep the session and CSRF cookies off plain HTTP,
+# redirect HTTP to HTTPS and send HSTS (see decware_order_tracker/middleware.py).
+# Added last so the middleware stays outermost even after django_heroku edits
+# MIDDLEWARE.
+if not DEBUG:
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    MIDDLEWARE = ['decware_order_tracker.middleware.HerokuHttpsMiddleware', *MIDDLEWARE]
