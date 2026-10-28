@@ -1,10 +1,10 @@
 import React from 'react';
 import { render, screen } from '@testing-library/react';
-import axios from 'axios';
 import HomePage from '../HomePage';
 import { getSavedOrderIds } from '../../utils/storage';
+import { getOrder } from '../../features/orders/api/get-order';
 
-jest.mock('axios');
+jest.mock('../../features/orders/api/get-order');
 jest.mock('../../utils/storage', () => ({
   getSavedOrderIds: jest.fn(),
   removeOrderId: jest.fn(),
@@ -25,7 +25,7 @@ const savedOrder = {
 describe('HomePage saved orders', () => {
   beforeEach(() => {
     getSavedOrderIds.mockReturnValue(['14775']);
-    axios.get.mockResolvedValue({ data: savedOrder });
+    getOrder.mockResolvedValue(savedOrder);
   });
 
   afterEach(() => {
@@ -36,7 +36,7 @@ describe('HomePage saved orders', () => {
     render(<HomePage />);
 
     const card = await screen.findByTestId('saved-order-14775');
-    expect(axios.get).toHaveBeenCalledWith('/api/orders/orders/14775/');
+    expect(getOrder).toHaveBeenCalledWith('14775');
     expect(card).toHaveTextContent('On Bench');
     expect(screen.getByRole('link', { name: /View details/i })).toHaveAttribute('href', '/orders/14775');
   });

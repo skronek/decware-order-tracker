@@ -4,12 +4,9 @@ import SearchPage from '../../pages/SearchPage';
 import { BrowserRouter } from 'react-router-dom';
 import { ThemeProvider } from '@mui/material/styles';
 import theme from '../../theme';
-import apiService from '../../services/apiService';
+import { getOrders } from '../../features/orders/api/get-orders';
 
-// Mock the API service
-jest.mock('../../services/apiService', () => ({
-  getOrder: jest.fn()
-}));
+jest.mock('../../features/orders/api/get-orders');
 
 // Mock order data for testing
 const mockOrderResponse = [
@@ -49,7 +46,7 @@ beforeEach(() => {
 describe('SearchPage Integration Tests', () => {
   test('should fetch and display order details when search form is submitted with valid data', async () => {
     // Mock the API response
-    apiService.getOrder.mockResolvedValueOnce(mockOrderResponse);
+    getOrders.mockResolvedValueOnce(mockOrderResponse);
     
     // Render the SearchPage component
     renderWithProviders(<SearchPage />);
@@ -70,7 +67,7 @@ describe('SearchPage Integration Tests', () => {
     });
     
     // Verify API was called with correct parameters
-    expect(apiService.getOrder).toHaveBeenCalledWith({
+    expect(getOrders).toHaveBeenCalledWith({
       customer_name: 'Test Customer',
       origin: 'Web',
       model: 'ZMA',
@@ -88,7 +85,7 @@ describe('SearchPage Integration Tests', () => {
   
   test('should display "Order not found" message when no results are returned', async () => {
     // Mock empty API response
-    apiService.getOrder.mockResolvedValueOnce([]);
+    getOrders.mockResolvedValueOnce([]);
     
     // Render the SearchPage component
     renderWithProviders(<SearchPage />);
@@ -127,13 +124,13 @@ describe('SearchPage Integration Tests', () => {
     expect(screen.getByText(/Please fill in customer name, origin, model, and volts/i)).toBeInTheDocument();
     
     // Verify no API call was made
-    expect(apiService.getOrder).not.toHaveBeenCalled();
+    expect(getOrders).not.toHaveBeenCalled();
   });
   
   test('should handle API errors gracefully', async () => {
     // Mock API error
     const errorObj = { message: 'Server error' };
-    apiService.getOrder.mockRejectedValueOnce(errorObj);
+    getOrders.mockRejectedValueOnce(errorObj);
     
     // Render the SearchPage component
     renderWithProviders(<SearchPage />);
