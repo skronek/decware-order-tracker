@@ -13,9 +13,15 @@ the header (local development, the test client) pass through untouched.
 """
 from django.http import HttpResponsePermanentRedirect
 
-# Short max-age, no includeSubDomains or preload. Raising it is a decision
-# for the site owner once HTTPS is confirmed working on every hostname.
-HSTS_HEADER_VALUE = 'max-age=3600'
+# One year. HTTPS is confirmed on decware-orders.info, www.decware-orders.info
+# and the herokuapp.com host. includeSubDomains and preload are left off: they
+# would also bind subdomains this app does not serve.
+HSTS_HEADER_VALUE = 'max-age=31536000'
+
+
+class HttpResponsePermanentRedirectKeepMethod(HttpResponsePermanentRedirect):
+    """308: a permanent redirect that keeps the request method and body."""
+    status_code = 308
 
 
 class HerokuHttpsMiddleware:
@@ -26,7 +32,7 @@ class HerokuHttpsMiddleware:
         forwarded_proto = request.META.get('HTTP_X_FORWARDED_PROTO')
         if forwarded_proto == 'http':
             # get_host() validates the Host header against ALLOWED_HOSTS.
-            return HttpResponsePermanentRedirect(
+            return HttpResponsePermanentRedirectKeepMethod(
                 'https://%s%s' % (request.get_host(), request.get_full_path())
             )
         response = self.get_response(request)
