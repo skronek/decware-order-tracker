@@ -78,7 +78,6 @@ def _load_settings(debug):
     """Execute settings.py fresh, as a separate module, with DEBUG set in the environment."""
     env = {'DEBUG': debug}
     with mock.patch.dict(os.environ, env):
-        os.environ.pop('HEROKU', None)
         spec = importlib.util.spec_from_file_location('_settings_under_test', SETTINGS_FILE)
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
@@ -93,6 +92,7 @@ class HttpsSettingsWiringTests(SimpleTestCase):
         self.assertEqual(list(settings.MIDDLEWARE)[0], MIDDLEWARE_PATH)
         # is_secure() must stay untouched; see middleware.py.
         self.assertFalse(hasattr(settings, 'SECURE_PROXY_SSL_HEADER'))
+        self.assertNotIn('*', settings.ALLOWED_HOSTS)
 
     def test_debug_leaves_https_protections_off(self):
         settings = _load_settings('True')

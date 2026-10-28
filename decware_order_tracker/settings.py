@@ -104,8 +104,8 @@ STATICFILES_DIRS = [
     os.path.join(BASE_DIR, 'frontend', 'build'),
 ]
 
-# Use the simpler static files storage
-STATICFILES_STORAGE = 'whitenoise.storage.StaticFilesStorage'
+# Gzip/Brotli copies without the manifest, which errors on any asset missing from it
+STATICFILES_STORAGE = 'whitenoise.storage.CompressedStaticFilesStorage'
 
 # Whitenoise settings
 WHITENOISE_ROOT = os.path.join(BASE_DIR, 'staticfiles')
@@ -148,15 +148,9 @@ REST_FRAMEWORK = {
     'PAGE_SIZE': 10,
 }
 
-# Configure Django App for Heroku
-if 'HEROKU' in os.environ:
-    import django_heroku
-    django_heroku.settings(locals())
-
 # HTTPS in production: keep the session and CSRF cookies off plain HTTP,
 # redirect HTTP to HTTPS and send HSTS (see decware_order_tracker/middleware.py).
-# Added last so the middleware stays outermost even after django_heroku edits
-# MIDDLEWARE.
+# The HTTPS middleware is prepended so it runs outermost.
 if not DEBUG:
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
