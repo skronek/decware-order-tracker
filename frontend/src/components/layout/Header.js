@@ -29,13 +29,6 @@ const Header = () => {
           >
             Home
           </Button>
-          <Button
-            color="inherit"
-            component={RouterLink}
-            to="/search"
-          >
-            Search Orders
-          </Button>
         </Box>
       </Toolbar>
     </AppBar>

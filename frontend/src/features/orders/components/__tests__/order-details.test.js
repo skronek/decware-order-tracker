@@ -126,9 +126,9 @@ describe('OrderDetails', () => {
     expect(screen.getByTestId('save-button')).toHaveTextContent('Unsave Order');
   });
 
-  it('links back to search', async () => {
+  it('links back to the saved orders', async () => {
     await renderWith(mockOrder);
-    expect(screen.getByRole('link', { name: /Back to search/i })).toHaveAttribute('href', '/search');
+    expect(screen.getByRole('link', { name: /Back to my orders/i })).toHaveAttribute('href', '/');
   });
 
   it('shows the loading state, not "not found", until the order arrives', () => {
