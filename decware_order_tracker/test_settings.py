@@ -24,5 +24,13 @@ PASSWORD_HASHERS = [
 # Disable debug for testing
 DEBUG = False
 
+# Run tests against the production HTTPS setup whatever DEBUG the environment
+# (or .env) set when settings.py loaded. The test client sends no
+# X-Forwarded-Proto header, so the middleware passes requests through.
+SESSION_COOKIE_SECURE = True
+CSRF_COOKIE_SECURE = True
+if 'decware_order_tracker.middleware.HerokuHttpsMiddleware' not in MIDDLEWARE:
+    MIDDLEWARE = ['decware_order_tracker.middleware.HerokuHttpsMiddleware', *MIDDLEWARE]
+
 # Disable Selenium browser automation during tests
 TESTING = True
