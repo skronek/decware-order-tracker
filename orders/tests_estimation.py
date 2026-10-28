@@ -111,6 +111,17 @@ class EstimationTests(TestCase):
         self.assertAlmostEqual(model.build_typical_days, 12.0)
         self.assertEqual(estimates['Waiting 0'].confidence_level, 'MEDIUM')
 
+    def test_builds_finished_after_as_of_are_not_used(self):
+        # Five builds that leave the list from QC after the as-of date: unknown at as_of
+        as_of = self.now - 10 * DAY
+        for i in range(5):
+            order = self._order(f'QC {i}', 'QUALITY_CONTROL', order_day=70 + i, removed_at=self.now - DAY)
+            self._history(order, None, 'NEW', self.first_run, observed=False)
+            self._history(order, 'NEW', 'ON_BENCH', self.now - 30 * DAY)
+
+        self.assertEqual(estimate_orders(self.now)[0].build_samples, 5)
+        self.assertEqual(estimate_orders(as_of)[0].build_samples, 0)
+
     def test_compute_estimates_replaces_stored_estimates(self):
         compute_estimates()
         compute_estimates()

@@ -97,13 +97,8 @@ export const SearchForm = ({ onSearch }) => {
           <Button
             type="submit"
             variant="contained"
+            color="secondary"
             fullWidth
-            sx={{
-              bgcolor: '#6c757d',
-              '&:hover': {
-                bgcolor: '#5a6268',
-              }
-            }}
           >
             Search
           </Button>

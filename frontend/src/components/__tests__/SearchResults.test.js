@@ -1,13 +1,7 @@
 import React from 'react';
-import { render, screen } from '@testing-library/react';
-import '@testing-library/jest-dom';
-import { SearchResults } from '../SearchResults'; 
-import * as storage from '../../utils/storage'; 
-
-jest.mock('../../utils/storage', () => ({
-  getSavedOrderIds: jest.fn(),
-  saveOrderIds: jest.fn(),
-}));
+import { render, screen, within, fireEvent } from '@testing-library/react';
+import { SearchResults } from '../SearchResults';
+import { getSavedOrderIds } from '../../utils/storage';
 
 describe('SearchResults', () => {
   const mockOrder = {
@@ -26,9 +20,7 @@ describe('SearchResults', () => {
   };
 
   beforeEach(() => {
-    storage.getSavedOrderIds.mockClear();
-    storage.saveOrderIds.mockClear();
-    storage.getSavedOrderIds.mockReturnValue([]); 
+    localStorage.clear();
   });
 
   it('renders nothing when results are null (initial state)', () => {
@@ -95,13 +87,26 @@ describe('SearchResults', () => {
     expect(screen.getByRole('link', { name: /View details/i })).toHaveAttribute('href', '/orders/123');
   });
 
-  it('renders "Internal error" message when multiple results are provided', () => {
+  it('renders every order when several match', () => {
+    render(<SearchResults results={[mockOrder, { ...mockOrder, id: 456, model: 'ZMA' }]} loading={false} error={null} />);
+    expect(screen.getByText('2 orders match these details.')).toBeInTheDocument();
+
+    const second = screen.getByTestId('order-summary-456');
+    expect(within(second).getByText('ZMA')).toBeInTheDocument();
+    expect(within(second).getByRole('link', { name: /View details/i })).toHaveAttribute('href', '/orders/456');
+    expect(screen.getAllByRole('button', { name: /Save This Order/i })).toHaveLength(2);
+  });
+
+  it('saves one order of several', () => {
     render(<SearchResults results={[mockOrder, { ...mockOrder, id: 456 }]} loading={false} error={null} />);
-    expect(screen.getByText(/Internal error: Multiple orders found/i)).toBeInTheDocument();
+    fireEvent.click(within(screen.getByTestId('order-summary-456')).getByRole('button', { name: /Save This Order/i }));
+
+    expect(getSavedOrderIds()).toEqual(['456']);
+    expect(within(screen.getByTestId('order-summary-456')).getByRole('button', { name: /Saved/i })).toBeDisabled();
+    expect(within(screen.getByTestId('order-summary-123')).getByRole('button', { name: /Save This Order/i })).toBeEnabled();
   });
 
   it('shows "Save This Order" button when order is not saved', () => {
-    storage.getSavedOrderIds.mockReturnValue([]); 
     render(<SearchResults results={[mockOrder]} loading={false} error={null} />);
     const saveButton = screen.getByRole('button', { name: /Save This Order/i });
     expect(saveButton).toBeInTheDocument();
@@ -109,7 +114,7 @@ describe('SearchResults', () => {
   });
 
   it('shows "Saved" button (disabled) when order is already saved', () => {
-    storage.getSavedOrderIds.mockReturnValue([mockOrder.id.toString()]); 
+    localStorage.setItem('savedOrderIds', JSON.stringify(['123']));
     render(<SearchResults results={[mockOrder]} loading={false} error={null} />);
     const savedButton = screen.getByRole('button', { name: /Saved/i });
     expect(savedButton).toBeInTheDocument();

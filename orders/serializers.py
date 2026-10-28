@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from django.utils import timezone
-from .models import OrderRecord, OrderEstimate, StatusHistory, StatusMetrics
+from .models import OrderRecord, OrderEstimate, StatusHistory
 
 
 class StatusHistorySerializer(serializers.ModelSerializer):
@@ -40,8 +40,3 @@ class OrderRecordSerializer(serializers.ModelSerializer):
             'explanation': estimate.explanation,
         }
 
-
-class StatusMetricsSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = StatusMetrics
-        fields = ['status', 'average_time_days', 'sample_size', 'confidence_level', 'last_updated']

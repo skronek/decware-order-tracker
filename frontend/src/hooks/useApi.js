@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react';
 
+// error is a message ready to show; lib/api-client.js sets it for failed requests
 export const useApi = (apiFunction) => {
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
@@ -13,7 +14,7 @@ export const useApi = (apiFunction) => {
       setData(result);
       return result;
     } catch (err) {
-      setError(err.response?.data?.message || err.message || 'An error occurred');
+      setError(err.message || 'An error occurred');
       throw err;
     } finally {
       setLoading(false);

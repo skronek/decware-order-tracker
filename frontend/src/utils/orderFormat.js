@@ -1,4 +1,3 @@
-// frontend/src/utils/orderFormat.js
 // Display helpers shared by the search results, saved orders and order details pages.
 
 // Labels for the statuses in OrderRecord.STATUS_CHOICES
@@ -27,10 +26,12 @@ export const statusColor = (status) => {
   return 'warning';
 };
 
-// Estimates are calendar dates (YYYY-MM-DD); parse them as local so they don't shift a day
-export const formatDay = (day) => {
-  if (!day) return 'N/A';
-  const date = /^\d{4}-\d{2}-\d{2}$/.test(day) ? new Date(`${day}T00:00:00`) : new Date(day);
+// Shows a date in the viewer's time zone. Timestamps (order_date, removed_at) convert to
+// the local day; calendar dates (YYYY-MM-DD, used by estimates) are parsed as local so
+// they don't shift a day.
+export const formatDate = (value) => {
+  if (!value) return 'N/A';
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(value) ? new Date(`${value}T00:00:00`) : new Date(value);
   return date.toLocaleDateString();
 };
 
@@ -38,9 +39,9 @@ export const formatEstCompletion = (completionData) => {
   if (!completionData) return 'N/A';
   const { days_remaining, estimated_date, range_end_date } = completionData;
   if (estimated_date && range_end_date && range_end_date !== estimated_date) {
-    return `${formatDay(estimated_date)} – ${formatDay(range_end_date)}`;
+    return `${formatDate(estimated_date)} – ${formatDate(range_end_date)}`;
   }
-  if (estimated_date) return formatDay(estimated_date);
+  if (estimated_date) return formatDate(estimated_date);
   if (days_remaining !== undefined && days_remaining !== null) {
     if (days_remaining < 0) return 'Overdue';
     if (days_remaining === 0) return 'Today';

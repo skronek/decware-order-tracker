@@ -65,24 +65,6 @@ class StatusHistory(models.Model):
         return f"{self.order.customer_name} - {self.previous_status} → {self.new_status}"
 
 
-class StatusMetrics(models.Model):
-    status = models.CharField(max_length=50, choices=OrderRecord.STATUS_CHOICES, unique=True)
-    average_time_days = models.FloatField(help_text="Average time spent in this status in days")
-    sample_size = models.PositiveIntegerField(help_text="Number of orders used to calculate the average")
-    last_updated = models.DateTimeField(auto_now=True)
-    confidence_level = models.CharField(
-        max_length=10,
-        choices=[('HIGH', 'High'), ('LOW', 'Low')],
-        help_text="Confidence level in the average time calculation"
-    )
-
-    class Meta:
-        verbose_name_plural = "Status metrics"
-
-    def __str__(self):
-        return f"{self.status} - {self.average_time_days:.1f} days (Confidence: {self.confidence_level})"
-
-
 class OrderEstimate(models.Model):
     """Estimated Passed QC date for an active order, recomputed after each scraper run."""
     order = models.OneToOneField(OrderRecord, on_delete=models.CASCADE, related_name='estimate')

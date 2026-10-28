@@ -1,20 +1,6 @@
 // jest-dom adds custom jest matchers for asserting on DOM nodes.
 import '@testing-library/jest-dom';
 
-// --- MOCK API HOOK GLOBALLY ---
-// Mock the useApi hook to prevent actual network calls during tests
-/* jest.mock('./hooks/useApi', () => ({
-  useApi: jest.fn(() => ({
-    get: jest.fn().mockResolvedValue({ data: {} }), // Default successful response (empty)
-    post: jest.fn().mockResolvedValue({ data: {} }), // Default successful response (empty)
-    loading: false,
-    error: null,
-    clearError: jest.fn(),
-  })),
-})); */ // Removing global mock
-
-// --- END MOCK ---
-
 // Mock window.matchMedia
 window.matchMedia = window.matchMedia || function() {
   return {
@@ -37,6 +23,10 @@ const mockAxios = {
   post: jest.fn(),
   put: jest.fn(),
   delete: jest.fn(),
+  interceptors: {
+    request: { use: jest.fn() },
+    response: { use: jest.fn() },
+  },
   create: () => mockAxios,
 };
 

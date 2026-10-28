@@ -1,47 +1,35 @@
 # Decware Order Tracker
 
-A web-based application that automates order tracking for Decware customers by providing real-time status updates and estimated completion times.
+Tracks orders on [Decware's public order list](https://orders.decware.com) and estimates when each one will pass QC. Live at https://decware-orders.info.
 
-## Overview
+The scraper downloads the order list daily, records each status change, and recomputes completion estimates with a queue model (position in the build queue ÷ recent start rate, plus typical build time).
 
-The Decware Order Tracker automatically retrieves order data from the Decware website daily, tracks status changes, and calculates estimated completion times based on historical data. It provides customers with a user-friendly interface to search and track their orders.
+## Stack
 
-## Features
+- **Backend:** Django + Django REST Framework, PostgreSQL, Selenium (headless Chrome) for scraping
+- **Frontend:** React (Create React App) + MUI
+- **Hosting:** Heroku
 
-- Automated daily order data synchronization
-- Order status tracking and history
-- Estimated completion time calculations
-- User-friendly search interface
-- Detailed order information display
-- Status change timeline
-- Mobile-responsive design
+## Development
 
-## Tech Stack
+Requires Python 3.12, Node 24, and a `.env` with `DATABASE_URL` (Postgres) and `SECRET_KEY`.
 
-- **Backend**: Python/Django with Django REST Framework
-- **Frontend**: React with Material UI
-- **Database**: PostgreSQL
-- **Deployment**: TBD
+```bash
+python -m venv venv && source venv/bin/activate
+pip install -r requirements.txt
+python manage.py migrate
+python manage.py runserver                 # API on :8000
 
-## Development Setup
+cd frontend && npm install && npm start    # app on :3000, proxies the API
 
-### Prerequisites
+python manage.py update_orders             # scrape + import + recompute estimates (needs Chrome)
+```
 
-- Python 3.8+
-- Node.js 14+
-- PostgreSQL 12+
-- Git
+Tests:
 
-### Installation
+```bash
+python manage.py test --settings=decware_order_tracker.test_settings   # SQLite, no Postgres needed
+cd frontend && CI=true npx react-scripts test --watchAll=false
+```
 
-1. Clone the repository
-2. Create and activate Python virtual environment
-3. Install Python dependencies: `pip install -r requirements.txt`
-4. Install frontend dependencies (instructions coming soon)
-5. Configure database settings
-6. Run migrations
-7. Start development server
-
-## Project Status
-
-Currently in initial development phase. See `implementation_todo_list.md` for detailed progress tracking.
+See `CLAUDE.md`, `orders/CLAUDE.md` and `frontend/CLAUDE.md` for architecture and conventions.

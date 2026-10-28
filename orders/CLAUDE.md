@@ -11,7 +11,8 @@
 - **History gap:** the scraper was down ~2025-05-27 → 2026-10-27. Transitions stamped 2026-10-27 and the 2025-04-17 initial import are not real stage durations.
 - **Estimation is a statistical queue model** (FIFO position ÷ start rate, plus build time). No LLM. `SLOW_RATE_FACTOR` widens the late end of the estimate range. Validate any change with `compute_estimates --backtest YYYY-MM-DD`.
 - CSV dates contain invisible characters. Use the scraper's existing cleaning/parsing helpers; `tests_date_parsing.py` covers them.
-- `test_settings.TESTING = True` disables Selenium in tests. Never launch a real browser from tests.
+- Production code has no test-mode branches. The one guard: with `test_settings.TESTING = True`, `DecwareOrderScraper._init_driver` raises instead of launching Chrome. Tests patch `_init_driver` with a fake driver (see `ScraperRunTests`) and write real CSV files for `parse_csv`.
+- CSV rows are skipped on a bad date; an unknown status is logged and the order keeps its current status (new orders with an unknown status aren't created). A composite key repeated within one CSV is applied once (first row wins).
 
 ## Tests
 

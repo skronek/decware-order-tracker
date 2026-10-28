@@ -1,4 +1,4 @@
-import { formatStatus, statusColor, isFinished, formatEstCompletion, formatConfidence } from '../orderFormat';
+import { formatStatus, statusColor, isFinished, formatDate, formatEstCompletion, formatConfidence } from '../orderFormat';
 
 describe('formatStatus', () => {
   it('labels every status the scraper records', () => {
@@ -29,6 +29,21 @@ describe('isFinished and statusColor', () => {
     expect(statusColor('NEW')).toBe('primary');
     expect(statusColor('ON_BENCH')).toBe('warning');
     expect(statusColor('PASSED_QC')).toBe('success');
+  });
+});
+
+describe('formatDate', () => {
+  it('shows a timestamp as its local date', () => {
+    expect(formatDate('2026-10-14T18:25:00Z')).toBe(new Date('2026-10-14T18:25:00Z').toLocaleDateString());
+  });
+
+  it('shows a calendar date as that same day', () => {
+    expect(formatDate('2027-03-03')).toBe(new Date(2027, 2, 3).toLocaleDateString());
+  });
+
+  it('returns N/A without a date', () => {
+    expect(formatDate(null)).toBe('N/A');
+    expect(formatDate('')).toBe('N/A');
   });
 });
 

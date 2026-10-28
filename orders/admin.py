@@ -1,8 +1,6 @@
 from django.contrib import admin
-from .models import OrderEstimate, OrderRecord, StatusHistory, StatusMetrics
+from .models import OrderEstimate, OrderRecord, StatusHistory
 
-
-# Register your models here.
 
 @admin.register(OrderRecord)
 class OrderRecordAdmin(admin.ModelAdmin):
@@ -18,13 +16,6 @@ class StatusHistoryAdmin(admin.ModelAdmin):
     list_filter = ('previous_status', 'new_status')
     search_fields = ('order__customer_name',)
     ordering = ('-timestamp',)
-
-
-@admin.register(StatusMetrics)
-class StatusMetricsAdmin(admin.ModelAdmin):
-    list_display = ('status', 'average_time_days', 'sample_size', 'confidence_level', 'last_updated')
-    list_filter = ('confidence_level',)
-    ordering = ('status',)
 
 
 @admin.register(OrderEstimate)

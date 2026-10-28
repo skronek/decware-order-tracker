@@ -30,9 +30,8 @@ Always pass `--settings=decware_order_tracker.test_settings` to backend tests; t
 ## Deployment (Heroku)
 
 - `Procfile`: gunicorn web dyno; `release` runs migrations.
-- Root `package.json` `postinstall` runs `heroku-build.sh`. That script builds the frontend, copies it to `staticfiles/`, and copies `index.html` to `decware_order_tracker/templates/react/`. The template is generated at build time and is not in git.
+- The Node buildpack runs the root `package.json` `build` script, which is `heroku-build.sh`. That script builds the frontend, copies it to `staticfiles/`, and copies `index.html` to `decware_order_tracker/templates/react/`. Both outputs are generated at build time and gitignored.
 - The user runs production deploys (`git push heroku main`). Ask them to do it; don't push yourself.
-- `netlify.toml` and `windsurf_deployment.yaml` are not used by the Heroku deploy.
 
 ## Gotchas
 

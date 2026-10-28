@@ -1,90 +1,55 @@
 import React, { useState, useEffect } from 'react';
-import { Typography, Container, Box, Paper, Grid, CircularProgress, Divider, Button, Link as MuiLink } from '@mui/material';
-import { Link } from 'react-router-dom';
-import { getSavedOrderIds, removeOrderId } from '../utils/storage'; // Import storage helpers
-import { formatStatus, formatEstCompletion } from '../utils/orderFormat';
+import { Typography, Container, Box, Paper, Divider, Button, Link as MuiLink } from '@mui/material';
+import LoadingSpinner from '../components/common/LoadingSpinner';
+import { OrderSummary } from '../components/order-summary';
+import { getSavedOrderIds, removeOrderId } from '../utils/storage';
 import { getOrder } from '../features/orders/api/get-order';
 
-// --- Helper functions ---
-// Helper to format date
-const formatDate = (dateString) => {
-  if (!dateString) return 'N/A';
-  const date = new Date(dateString);
-  // Adjust for timezone offset to display in local time
-  const utcDate = new Date(date.getTime() + date.getTimezoneOffset() * 60000);
-  return `${utcDate.getMonth() + 1}/${utcDate.getDate()}/${utcDate.getFullYear()}`;
+// Fetches each saved order. IDs the API no longer knows (404) are dropped from storage.
+const loadSavedOrders = async (ids) => {
+  const results = await Promise.all(
+    ids.map((id) => getOrder(id).then((order) => ({ order }), (error) => ({ id, error })))
+  );
+  const failed = results.filter((result) => result.error);
+  const missing = failed.filter((result) => result.error.response?.status === 404);
+  missing.forEach((result) => removeOrderId(result.id));
+
+  return {
+    orders: results.filter((result) => result.order).map((result) => result.order),
+    hasErrors: failed.length > missing.length,
+  };
 };
-// --- End Helper Functions ---
 
 const HomePage = () => {
-  const [savedOrderIds, setSavedOrderIds] = useState([]);
-  const [savedOrdersDetails, setSavedOrdersDetails] = useState([]);
-  const [isLoading, setIsLoading] = useState(false);
+  const [savedOrderIds] = useState(getSavedOrderIds);
+  const [savedOrders, setSavedOrders] = useState([]);
+  const [isLoading, setIsLoading] = useState(savedOrderIds.length > 0);
   const [error, setError] = useState(null);
 
-  // Effect to get all saved order IDs on mount
   useEffect(() => {
-    const savedIds = getSavedOrderIds();
-    setSavedOrderIds(savedIds);
-  }, []); // Empty dependency array means run once on mount
+    if (savedOrderIds.length === 0) return;
+    let ignore = false;
 
-  // Effect to fetch order details when savedOrderIds changes
-  useEffect(() => {
-    if (savedOrderIds.length > 0) {
-      const fetchSavedOrders = async () => {
-        setIsLoading(true);
-        setError(null);
-        
-        try {
-          // Create an array of promises for each order fetch
-          const orderPromises = savedOrderIds.map(id => 
-            getOrder(String(id).trim())
-              .catch(err => {
-                console.error(`Error fetching order ${id}:`, err);
-                return null; // Return null for failed requests
-              })
-          );
-          
-          // Wait for all promises to resolve
-          const results = await Promise.all(orderPromises);
-          
-          // Filter out null results (failed requests)
-          const validResults = results.filter(result => result !== null);
-          
-          setSavedOrdersDetails(validResults);
-          
-          if (validResults.length < results.length) {
-            setError('Some orders could not be loaded.');
-          }
-        } catch (err) {
-          console.error('Error fetching saved orders:', err);
-          setError('Failed to load saved order details.');
-        } finally {
-          setIsLoading(false);
-        }
-      };
-      
-      fetchSavedOrders();
-    } else {
-      setSavedOrdersDetails([]);
-    }
-  }, [savedOrderIds]); // Run when savedOrderIds changes
-  
-  // Function to handle removing an order
+    loadSavedOrders(savedOrderIds).then(({ orders, hasErrors }) => {
+      if (ignore) return;
+      setSavedOrders(orders);
+      setError(hasErrors ? 'Some orders could not be loaded.' : null);
+      setIsLoading(false);
+    });
+
+    return () => {
+      ignore = true;
+    };
+  }, [savedOrderIds]);
+
   const handleRemoveOrder = (orderId) => {
-    // Ensure orderId is treated as a string for consistency
-    orderId = String(orderId);
-    const updatedIds = removeOrderId(orderId);
-    setSavedOrderIds(updatedIds);
-    // Log for debugging
-    console.log('Removed order ID:', orderId);
-    console.log('Updated saved IDs:', updatedIds);
+    removeOrderId(orderId);
+    setSavedOrders((orders) => orders.filter((order) => order.id !== orderId));
   };
 
   return (
     <Container maxWidth="lg">
       <Box sx={{ my: 4 }}>
-        {/* Welcome Section */}
         <Typography variant="h4" component="h1" gutterBottom>
           Decware Order Tracker
         </Typography>
@@ -107,61 +72,35 @@ const HomePage = () => {
         </Typography>
       </Box>
 
-      {/* Saved Order Section */}
       {savedOrderIds.length > 0 && (
         <Box sx={{ my: 4 }}>
           <Divider sx={{ mb: 3 }} />
           <Typography variant="h5" component="h2" gutterBottom>
             Your Saved Orders
           </Typography>
-          <Typography variant="body2" color="text.secondary" paragraph sx={{ mb: 2 }}>
-            The estimated delivery date is based on the average time it takes from the order date to when the order is marked PASSED_QC_AWAITING_PAYMENT.
-          </Typography>
-          {isLoading && (
-            <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
-              <CircularProgress data-testid="saved-order-loading" />
-            </Box>
-          )}
+          {isLoading && <LoadingSpinner />}
           {error && (
-            <Paper sx={{ p: 2, bgcolor: 'error.light', color: 'error.contrastText' }}>
+            <Paper sx={{ p: 2, mb: 2, bgcolor: 'error.light', color: 'error.contrastText' }}>
               <Typography data-testid="saved-order-error">{error}</Typography>
             </Paper>
           )}
-          {savedOrdersDetails.length > 0 && !isLoading && (
+          {savedOrders.length > 0 && (
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-              {savedOrdersDetails.map((order) => (
-                <Paper key={order.id} sx={{ p: 3 }} data-testid={`saved-order-${order.id}`}>
-                  <Grid container spacing={2}>
-                    <Grid item xs={12} sm={6}><Typography><strong>Customer:</strong> {order.customer_name}</Typography></Grid>
-                    <Grid item xs={12} sm={6}><Typography><strong>Model:</strong> {order.model}</Typography></Grid>
-                    <Grid item xs={12} sm={4}><Typography><strong>Origin:</strong> {order.origin}</Typography></Grid>
-                    <Grid item xs={12} sm={4}><Typography><strong>Base:</strong> {order.base || 'N/A'}</Typography></Grid>
-                    <Grid item xs={12} sm={4}><Typography><strong>Volts:</strong> {order.volts}</Typography></Grid>
-                    <Grid item xs={12} sm={4}><Typography><strong>Order Date:</strong> {formatDate(order.order_date)}</Typography></Grid>
-                    <Grid item xs={12} sm={4}><Typography><strong>Status:</strong> {formatStatus(order.status)}</Typography></Grid>
-                    <Grid item xs={12} sm={4}><Typography><strong>Est. Completion:</strong> {formatEstCompletion(order.estimated_completion)}</Typography></Grid>
-                    {order.estimated_completion?.explanation && (
-                      <Grid item xs={12}><Typography variant="body2" color="text.secondary">{order.estimated_completion.explanation}</Typography></Grid>
-                    )}
-                    <Grid item xs={12} sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1, mt: 2 }}>
-                      <Button component={Link} to={`/orders/${order.id}`}>
-                        View details
-                      </Button>
-                      <Button 
-                        variant="outlined" 
-                        color="error" 
-                        onClick={() => handleRemoveOrder(order.id)}
-                        data-testid={`remove-order-${order.id}`}
-                      >
-                        Remove
-                      </Button>
-                    </Grid>
-                  </Grid>
-                </Paper>
+              {savedOrders.map((order) => (
+                <OrderSummary key={order.id} order={order}>
+                  <Button
+                    variant="outlined"
+                    color="error"
+                    onClick={() => handleRemoveOrder(order.id)}
+                    data-testid={`remove-order-${order.id}`}
+                  >
+                    Remove
+                  </Button>
+                </OrderSummary>
               ))}
             </Box>
           )}
-          {savedOrdersDetails.length === 0 && !isLoading && !error && (
+          {savedOrders.length === 0 && !isLoading && !error && (
             <Paper sx={{ p: 3, bgcolor: 'info.light' }}>
               <Typography>No saved orders to display.</Typography>
             </Paper>
