@@ -3,7 +3,7 @@ import { Typography, Container, Box } from '@mui/material';
 import { SearchForm } from '../components/SearchForm';
 import { SearchResults } from '../components/SearchResults';
 import { useApi } from '../hooks/useApi';
-import apiService from '../services/apiService';
+import { getOrders } from '../features/orders/api/get-orders';
 
 const SearchPage = () => {
   // Use the API hook to manage state for the order lookup
@@ -12,11 +12,11 @@ const SearchPage = () => {
     error, 
     loading, 
     execute: performSearch // Rename execute for clarity
-  } = useApi(apiService.getOrder); // Pass the API function to the hook
+  } = useApi(getOrders); // Pass the API function to the hook
 
   // Define the handler function to be passed to SearchForm
   const handleSearch = async (formData) => {
-    // The useApi hook's execute function takes the parameters for the apiService.getOrder
+    // The useApi hook's execute function takes the parameters for getOrders
     try {
       await performSearch(formData);
     } catch {

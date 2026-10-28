@@ -23,7 +23,7 @@ describe('useOrderDetails', () => {
     mockExecute.mockReset();
 
     useApi.mockReturnValue({
-      execute: mockExecute.mockResolvedValue({ data: mockOrderDetails }),
+      execute: mockExecute.mockResolvedValue(mockOrderDetails),
       loading: false,
       error: null,
     });
@@ -40,7 +40,7 @@ describe('useOrderDetails', () => {
       expect(result.current.orderDetails).toEqual(mockOrderDetails);
     });
 
-    expect(mockExecute).toHaveBeenCalledWith('/orders/orders/1/');
+    expect(mockExecute).toHaveBeenCalledWith('1');
     expect(result.current.loading).toBe(false);
     expect(result.current.error).toBeNull();
   });

@@ -11,16 +11,7 @@ jest.mock('../../components/SearchResults', () => ({
   SearchResults: () => <div>Mock Search Results</div>
 }));
 
-// Mock the hook used by SearchPage if necessary (assuming it uses useOrders)
-jest.mock('../../hooks/useOrders', () => ({
-  useOrders: () => ({
-    searchResults: null,
-    loading: false,
-    error: null,
-    searchOrders: jest.fn(),
-    clearSearchResults: jest.fn(),
-  }),
-}));
+jest.mock('../../features/orders/api/get-orders');
 
 describe('SearchPage', () => {
   it('renders the correct page title', () => {

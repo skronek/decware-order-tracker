@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { Typography, Container, Box, Paper, Grid, CircularProgress, Divider, Button, Link as MuiLink } from '@mui/material';
-import axios from 'axios';
 import { Link } from 'react-router-dom';
 import { getSavedOrderIds, removeOrderId } from '../utils/storage'; // Import storage helpers
 import { formatStatus, formatEstCompletion } from '../utils/orderFormat';
+import { getOrder } from '../features/orders/api/get-order';
 
 // --- Helper functions ---
 // Helper to format date
@@ -38,8 +38,7 @@ const HomePage = () => {
         try {
           // Create an array of promises for each order fetch
           const orderPromises = savedOrderIds.map(id => 
-            axios.get(`/api/orders/orders/${String(id).trim()}/`)
-              .then(response => response.data)
+            getOrder(String(id).trim())
               .catch(err => {
                 console.error(`Error fetching order ${id}:`, err);
                 return null; // Return null for failed requests
