@@ -3,272 +3,128 @@ Unit tests for the CSV parsing and database update logic in orders/scraper.py.
 """
 
 import os
-import io
-import csv
-import time
 import shutil
 import tempfile
 import datetime
-import unittest
 from unittest.mock import patch, MagicMock
 
 from django.test import TestCase
 from django.utils import timezone
-from django.conf import settings
 
 from .models import OrderRecord, StatusHistory
 from .scraper import DecwareOrderScraper
-import os, tempfile, shutil
 
-# Test cases will go here
+HEADER = 'For,From,Qty,MODEL,Base,VOLTS,Options,Status,Date-Time\r\n'
+
 
 class ScraperParseCsvTests(TestCase):
-    """Tests the parse_csv method of the DecwareOrderScraper."""
+    """Tests parse_csv against real CSV files."""
 
     def setUp(self):
-        """Initial setup for scraper tests."""
-        # Create a test CSV file
         self.test_dir = tempfile.mkdtemp()
-        self.csv_path = os.path.join(self.test_dir, 'test_orders.csv')
-        
-        # Create scraper instance
+        self.addCleanup(shutil.rmtree, self.test_dir)
         self.scraper = DecwareOrderScraper()
-        
-        # Set TESTING flag in settings
-        from django.conf import settings
-        setattr(settings, 'TESTING', True)
-        
-    def tearDown(self):
-        """Clean up after tests."""
-        # Remove test directory
-        shutil.rmtree(self.test_dir)
-        
-        # Reset TESTING flag
-        from django.conf import settings
-        setattr(settings, 'TESTING', False)
+
+    def _write(self, content, encoding='utf-8'):
+        path = os.path.join(self.test_dir, 'orders.csv')
+        with open(path, 'w', encoding=encoding, newline='') as f:
+            f.write(content)
+        return path
 
     def test_parse_valid_csv(self):
-        """Test parsing a standard, valid CSV."""
-        # Create test data for valid CSV
-        self.scraper.test_data = [
-            {
-                'customer_name': 'Test Customer 1',
-                'origin': 'Test Origin 1',
-                'quantity': 1,
-                'model': 'Test Model 1',
-                'base': 'Test Base 1',
-                'volts': '110V',
-                'options': 'None',
-                'status': 'NEW',
-                'order_date': timezone.now()
-            },
-            {
-                'customer_name': 'Test Customer 2',
-                'origin': 'Test Origin 2',
-                'quantity': 1,
-                'model': 'Test Model 2',
-                'base': 'Test Base 2',
-                'volts': '220V',
-                'options': 'None',
-                'status': 'NEW',
-                'order_date': timezone.now()
-            }
-        ]
-        
-        # Parse the CSV
-        parsed_data = self.scraper.parse_csv(self.csv_path)
-        
-        # Verify the results
-        self.assertEqual(len(parsed_data), 2)
-        self.assertEqual(parsed_data[0]['customer_name'], 'Test Customer 1')
-        self.assertEqual(parsed_data[1]['customer_name'], 'Test Customer 2')
+        path = self._write(
+            HEADER
+            + '"Ann","Web","2","SE84UFO","Walnut","120V","Tubes","Parts Pulled","2024-07-31 10:00:00"\r\n'
+            + '"Bob","Mail","x","Torii","","240V","","On Bench","2024-08-01 11:30:00"\r\n'
+        )
 
-    def test_parse_csv_with_missing_columns(self):
-        """Test parsing a CSV where some expected columns are missing in data rows."""
-        # Create test data with missing columns
-        self.scraper.test_data = [
-            {
-                'customer_name': 'Missing Columns 1',
-                'origin': 'Test Origin',
-                'quantity': 1,
-                'model': 'Test Model',
-                'base': '',  # Missing base
-                'volts': '',  # Missing volts
-                'options': 'None',
-                'status': 'NEW',
-                'order_date': timezone.now()
-            },
-            {
-                'customer_name': 'Missing Columns 2',
-                'origin': '',  # Missing origin
-                'quantity': 1,
-                'model': 'Test Model',
-                'base': 'Test Base',
-                'volts': '220V',
-                'options': '',  # Missing options
-                'status': 'NEW',
-                'order_date': timezone.now()
-            }
-        ]
-        
-        # Parse the CSV
-        parsed_data = self.scraper.parse_csv(self.csv_path)
-        
-        # Verify the results
-        self.assertEqual(len(parsed_data), 2)
-        self.assertEqual(parsed_data[0]['base'], '')
-        self.assertEqual(parsed_data[0]['volts'], '')
-        self.assertEqual(parsed_data[1]['origin'], '')
-        self.assertEqual(parsed_data[1]['options'], '')
+        orders = self.scraper.parse_csv(path)
 
-    def test_parse_csv_with_extra_columns(self):
-        """Test parsing a CSV with extra columns not in mapping."""
-        # Create test data with extra columns (will be ignored)
-        self.scraper.test_data = [
-            {
-                'customer_name': 'Extra Columns',
-                'origin': 'Test Origin',
-                'quantity': 1,
-                'model': 'Test Model',
-                'base': 'Test Base',
-                'volts': '110V',
-                'options': 'None',
-                'status': 'NEW',
-                'order_date': timezone.now()
-            }
-        ]
-        
-        # Parse the CSV
-        parsed_data = self.scraper.parse_csv(self.csv_path)
-        
-        # Verify the results
-        self.assertEqual(len(parsed_data), 1)
-        self.assertEqual(parsed_data[0]['customer_name'], 'Extra Columns')
-        
-        # Test that extra_column is not in the parsed data
-        # We need to modify this test since we're using test_data directly
-        # and not actually parsing a CSV with extra columns
-        with self.assertRaises(KeyError):
-            _ = parsed_data[0]['non_existent_field']
+        self.assertEqual(len(orders), 2)
+        self.assertEqual(orders[0], {
+            'customer_name': 'Ann', 'origin': 'Web', 'quantity': 2, 'model': 'SE84UFO', 'base': 'Walnut',
+            'volts': '120V', 'options': 'Tubes', 'status': 'PARTS_PULLED',
+            'order_date': timezone.make_aware(datetime.datetime(2024, 7, 31, 10, 0, 0)),
+        })
+        self.assertEqual(orders[1]['quantity'], 1)  # Non-numeric Qty defaults to 1
+        self.assertEqual(orders[1]['status'], 'ON_BENCH')
+        self.assertEqual(orders[1]['base'], '')
 
-    def test_parse_csv_status_normalization(self):
-        """Test various status strings are correctly normalized."""
-        # Create test data with various status strings
-        self.scraper.test_data = [
-            {'customer_name': 'Status Test 1', 'model': 'M1', 'status': 'NEW', 'order_date': timezone.now()},
-            {'customer_name': 'Status Test 2', 'model': 'M2', 'status': 'PARTS_PULLED', 'order_date': timezone.now()},
-            {'customer_name': 'Status Test 3', 'model': 'M3', 'status': 'IN_PRODUCTION', 'order_date': timezone.now()},
-            {'customer_name': 'Status Test 4', 'model': 'M4', 'status': 'PASSED_QC', 'order_date': timezone.now()},
-            {'customer_name': 'Status Test 5', 'model': 'M5', 'status': 'COMPLETED_WAITING_BASE', 'order_date': timezone.now()},
-            {'customer_name': 'Status Test 6', 'model': 'M6', 'status': 'UNKNOWN', 'order_date': timezone.now()}
-        ]
-        
-        # Parse the CSV
-        parsed_data = self.scraper.parse_csv(self.csv_path)
-        
-        # Verify the results
-        self.assertEqual(len(parsed_data), 6)
-        self.assertEqual(parsed_data[0]['status'], 'NEW')
-        self.assertEqual(parsed_data[1]['status'], 'PARTS_PULLED')
-        self.assertEqual(parsed_data[2]['status'], 'IN_PRODUCTION')
-        self.assertEqual(parsed_data[3]['status'], 'PASSED_QC')
-        self.assertEqual(parsed_data[4]['status'], 'COMPLETED_WAITING_BASE')
-        self.assertEqual(parsed_data[5]['status'], 'UNKNOWN')  # Default for unrecognized status
+    def test_parse_csv_with_bom_and_extra_columns(self):
+        path = self._write(
+            'For,From,Qty,MODEL,Base,VOLTS,Options,Status,Date-Time,Extra\r\n'
+            '"Ann","Web","1","M","B","120V","","New","2024-07-31 10:00:00","ignored"\r\n',
+            encoding='utf-8-sig',
+        )
 
-    def test_parse_csv_bad_data_types(self):
-        """Test handling of incorrect data types (e.g., non-int Qty, bad date)."""
-        # Create test data with bad data types
-        self.scraper.test_data = [
-            {
-                'customer_name': 'Bad Qty',
-                'origin': 'Test Origin',
-                'quantity': 1,  # Fixed to be an integer for the test
-                'model': 'Test Model',
-                'base': 'Test Base',
-                'volts': '110V',
-                'options': 'None',
-                'status': 'NEW',
-                'order_date': timezone.now()
-            },
-            {
-                'customer_name': 'Bad Date',
-                'origin': 'Test Origin',
-                'quantity': 1,
-                'model': 'Test Model',
-                'base': 'Test Base',
-                'volts': '110V',
-                'options': 'None',
-                'status': 'NEW',
-                'order_date': timezone.now()  # Fixed to be a valid date for the test
-            }
-        ]
-        
-        # Parse the CSV
-        parsed_data = self.scraper.parse_csv(self.csv_path)
-        
-        # Verify the results
-        self.assertEqual(len(parsed_data), 2)
-        # Bad quantity should default to 1
-        self.assertEqual(parsed_data[0]['quantity'], 1)
-        # Bad date should be replaced with current time in test mode
-        self.assertIsInstance(parsed_data[1]['order_date'], datetime.datetime)
+        orders = self.scraper.parse_csv(path)
 
-    def test_parse_csv_with_bom(self):
-        """Test parsing CSV with a UTF-8 Byte Order Mark (BOM)."""
-        # Create test data (BOM handling is done at file reading level)
-        self.scraper.test_data = [
-            {
-                'customer_name': 'BOM Test',
-                'origin': 'Test Origin',
-                'quantity': 1,
-                'model': 'Test Model',
-                'base': 'Test Base',
-                'volts': '110V',
-                'options': 'None',
-                'status': 'NEW',
-                'order_date': timezone.now()
-            }
-        ]
-        
-        # Parse the CSV
-        parsed_data = self.scraper.parse_csv(self.csv_path)
-        
-        # Verify the results
-        self.assertEqual(len(parsed_data), 1)
-        self.assertEqual(parsed_data[0]['customer_name'], 'BOM Test')
+        self.assertEqual(len(orders), 1)
+        self.assertEqual(orders[0]['customer_name'], 'Ann')
+        self.assertNotIn('Extra', orders[0])
+
+    def test_parse_latin1_csv(self):
+        path = self._write(
+            HEADER + '"Jos\xe9","Web","1","M","B","120V","","New","2024-07-31 10:00:00"\r\n',
+            encoding='latin-1',
+        )
+
+        orders = self.scraper.parse_csv(path)
+
+        self.assertEqual([o['customer_name'] for o in orders], ['Jos\xe9'])
+
+    def test_status_normalization(self):
+        statuses = ['', 'New', 'parts pulled', 'Passed QC', 'Passed Quality Control - Awaiting Payment',
+                    'Completed waiting for wood base']
+        path = self._write(HEADER + ''.join(
+            f'"C{i}","Web","1","M","B","120V","","{s}","2024-07-31 10:00:00"\r\n' for i, s in enumerate(statuses)
+        ))
+
+        orders = self.scraper.parse_csv(path)
+
+        self.assertEqual([o['status'] for o in orders], [
+            'NEW', 'NEW', 'PARTS_PULLED', 'PASSED_QC', 'PASSED_QC_AWAITING_PAYMENT', 'COMPLETED_WAITING_BASE',
+        ])
+
+    def test_unknown_status_is_logged_and_left_unset(self):
+        path = self._write(HEADER + '"Ann","Web","1","M","B","120V","","Shipped","2024-07-31 10:00:00"\r\n')
+
+        with self.assertLogs('orders.scraper', level='WARNING') as logs:
+            orders = self.scraper.parse_csv(path)
+
+        self.assertIsNone(orders[0]['status'])
+        self.assertTrue(any("Unknown status 'Shipped'" in line for line in logs.output))
+
+    def test_rows_with_bad_dates_are_skipped(self):
+        path = self._write(
+            HEADER
+            + '"Good","Web","1","M","B","120V","","New","2024-07-31 10:00:00"\r\n'
+            + '"Bad","Web","1","M","B","120V","","New","not a date"\r\n'
+            + '"Empty","Web","1","M","B","120V","","New",""\r\n'
+        )
+
+        orders = self.scraper.parse_csv(path)
+
+        self.assertEqual([o['customer_name'] for o in orders], ['Good'])
+
+    def test_missing_required_column_returns_nothing(self):
+        path = self._write('For,From,MODEL\r\n"Ann","Web","M"\r\n')
+
+        self.assertEqual(self.scraper.parse_csv(path), [])
 
     def test_parse_empty_csv(self):
-        """Test parsing an empty CSV file (only headers)."""
-        # Create empty test data
-        self.scraper.test_data = []
-        
-        # Parse the CSV
-        parsed_data = self.scraper.parse_csv(self.csv_path)
-        
-        # Verify the results
-        self.assertEqual(len(parsed_data), 0)
+        self.assertEqual(self.scraper.parse_csv(self._write(HEADER)), [])
 
     def test_parse_csv_io_error(self):
-        """Test handling of IOError when opening the CSV."""
-        # Set a non-existent path and no test data
-        non_existent_path = os.path.join(self.test_dir, 'non_existent.csv')
-        
-        # Parse the CSV (should handle the IOError gracefully)
-        parsed_data = self.scraper.parse_csv(non_existent_path)
-        
-        # Verify the results
-        self.assertEqual(len(parsed_data), 0)
+        self.assertEqual(self.scraper.parse_csv(os.path.join(self.test_dir, 'non_existent.csv')), [])
 
-# --- Tests for update_database will go below --- #
 
 class ScraperUpdateDatabaseTests(TestCase):
     """Tests the update_database method of the DecwareOrderScraper."""
 
     def setUp(self):
         """Set up a scraper instance for database tests."""
-        with patch('orders.scraper.DecwareOrderScraper._init_driver', return_value=None):
-            self.scraper = DecwareOrderScraper()
-        self.scraper.cleanup = lambda: None
+        self.scraper = DecwareOrderScraper()
 
     def test_update_db_create_new_orders(self):
         """Test creating new orders in the database."""
@@ -409,67 +265,70 @@ class ScraperUpdateDatabaseTests(TestCase):
 
     @patch('orders.scraper.logger.error')
     def test_update_db_handles_exception(self, mock_logger_error):
-        """Test that processing continues after an error on one order."""
-        parsed_orders = [
-            # Valid new order
-            {
-                'customer_name': 'Good Cust', 'origin': 'Web', 'quantity': 1, 'model': 'M_GOOD',
-                'base': 'Good', 'volts': '120V', 'options': 'Opt', 'status': 'NEW',
-                'order_date': timezone.make_aware(datetime.datetime(2023, 1, 1))
-            },
-            # Order that will cause an error (e.g., mock update_or_create failure)
-            {
-                'customer_name': 'Bad Cust', 'origin': 'Web', 'quantity': 1, 'model': 'M_BAD',
-                'base': 'Bad', 'volts': '120V', 'options': 'Opt', 'status': 'NEW',
-                'order_date': timezone.make_aware(datetime.datetime(2023, 1, 1))
-            },
-            # Another valid new order
-            {
-                'customer_name': 'Good Cust 2', 'origin': 'Phone', 'quantity': 1, 'model': 'M_GOOD2',
-                'base': 'Good2', 'volts': '240V', 'options': 'Opt2', 'status': 'NEW',
-                'order_date': timezone.make_aware(datetime.datetime(2023, 1, 2))
-            },
-        ]
+        """A database error on one order doesn't stop the others (each order gets a savepoint)."""
+        good = self._row('Good Cust')
+        # quantity is a PositiveIntegerField, so the database's CHECK constraint rejects -1
+        bad = {**self._row('Bad Cust'), 'quantity': -1}
+        good2 = self._row('Good Cust 2')
 
-        # Mock update_or_create to fail for the 'Bad Cust'
-        original_update_or_create = OrderRecord.objects.update_or_create
-        def side_effect(*args, **kwargs):
-            if kwargs.get('customer_name') == 'Bad Cust':
-                raise ValueError("Simulated database error")
-            # Call the original function for other cases
-            # Need to handle both positional and keyword args depending on how it's called
-            if args:
-                 return original_update_or_create(*args, **kwargs)
-            else:
-                 return original_update_or_create(**kwargs)
+        orders_processed = self.scraper.update_database([good, bad, good2])
 
-
-        with patch.object(OrderRecord.objects, 'update_or_create', side_effect=side_effect):
-            orders_processed = self.scraper.update_database(parsed_orders)
-
-        # Should process 2 out of 3 (the good ones)
         self.assertEqual(orders_processed, 2)
-        # Database should contain only the 2 good orders
-        self.assertEqual(OrderRecord.objects.count(), 2)
-        self.assertTrue(OrderRecord.objects.filter(customer_name='Good Cust').exists())
-        self.assertTrue(OrderRecord.objects.filter(customer_name='Good Cust 2').exists())
-        self.assertFalse(OrderRecord.objects.filter(customer_name='Bad Cust').exists())
-        # History should exist only for the 2 good orders
+        self.assertEqual(
+            set(OrderRecord.objects.values_list('customer_name', flat=True)), {'Good Cust', 'Good Cust 2'}
+        )
         self.assertEqual(StatusHistory.objects.count(), 2)
-
-        # Check that the error was logged
         mock_logger_error.assert_called()
-        self.assertIn("Error processing order", mock_logger_error.call_args[0][0])
-        self.assertIn("'customer_name': 'Bad Cust'", str(mock_logger_error.call_args[0][0]))
+        self.assertIn("'customer_name': 'Bad Cust'", mock_logger_error.call_args[0][0])
+
+    def test_duplicate_rows_keep_the_first(self):
+        """A key that appears twice in one CSV is only applied once, without flip-flopping status."""
+        order = OrderRecord.objects.create(
+            customer_name='Dup', origin='Web', model='M', base='B', volts='120V', status='NEW',
+            order_date=timezone.make_aware(datetime.datetime(2023, 1, 1)),
+        )
+
+        with self.assertLogs('orders.scraper', level='WARNING') as logs:
+            processed = self.scraper.update_database([self._row('Dup', 'ON_BENCH'), self._row('Dup', 'NEW')])
+
+        self.assertEqual(processed, 1)
+        order.refresh_from_db()
+        self.assertEqual(order.status, 'ON_BENCH')
+        self.assertEqual(
+            list(StatusHistory.objects.values_list('previous_status', 'new_status')), [('NEW', 'ON_BENCH')]
+        )
+        self.assertTrue(any('duplicate' in line for line in logs.output))
+
+    def test_unknown_status_keeps_existing_status(self):
+        """An unrecognized status (None from parsing) leaves the order's status alone but still marks it seen."""
+        order = OrderRecord.objects.create(
+            customer_name='Odd', origin='Web', model='M', base='B', volts='120V', status='ON_BENCH',
+            order_date=timezone.make_aware(datetime.datetime(2023, 1, 1)),
+        )
+
+        processed = self.scraper.update_database([self._row('Odd', None), self._row('Brand New Odd', None)])
+
+        self.assertEqual(processed, 1)
+        order.refresh_from_db()
+        self.assertEqual(order.status, 'ON_BENCH')
+        self.assertIsNotNone(order.last_seen_at)
+        self.assertIsNone(order.removed_at)
+        self.assertFalse(StatusHistory.objects.exists())
+        self.assertFalse(OrderRecord.objects.filter(customer_name='Brand New Odd').exists())
+
+    def _row(self, name, status='NEW'):
+        return {
+            'customer_name': name, 'origin': 'Web', 'model': 'M', 'base': 'B', 'volts': '120V',
+            'quantity': 1, 'options': '', 'status': status,
+            'order_date': timezone.make_aware(datetime.datetime(2023, 1, 1)),
+        }
 
 
 class ScraperLifecycleTrackingTests(TestCase):
     """Tests last-seen/removed tracking and observed status changes in update_database."""
 
     def setUp(self):
-        with patch('orders.scraper.DecwareOrderScraper._init_driver', return_value=None):
-            self.scraper = DecwareOrderScraper()
-        self.scraper.cleanup = lambda: None
+        self.scraper = DecwareOrderScraper()
 
     def _create_order(self, name, status='NEW', last_seen_days_ago=1):
         return OrderRecord.objects.create(
@@ -538,111 +397,55 @@ class ScraperLifecycleTrackingTests(TestCase):
         self.assertFalse(StatusHistory.objects.get().is_observed)
 
 # ==================================
-# Integration Tests (Mocking Download)
+# Integration Tests (Mocking the browser)
 # ==================================
 
-class ScraperDownloadIntegrationTests(TestCase):
-    """Tests the integration between download_csv and parse_csv, mocking web interactions."""
+class ScraperRunTests(TestCase):
+    """Runs download -> parse -> update with a fake browser that 'downloads' a CSV."""
 
-    def setUp(self):
-        """Set up a temporary directory and dummy CSV file for each test."""
-        self.temp_download_dir = tempfile.mkdtemp()
-        self.dummy_csv_path = os.path.join(self.temp_download_dir, 'decware_orders_integration_test.csv')
-        self.csv_content = (
-            'For,From,Qty,MODEL,Base,VOLTS,Options,Status,Date-Time\r\n' # Note: \r\n line endings
-            '"Integration User","Web","1","INT-MOD-A","Base-A","120V","Opt-A","New","2024-07-31 10:00:00"\r\n'
-            '"Another User","Mail","2","INT-MOD-B","Base-B","240V","Opt-B","Parts Pulled","2024-07-31 11:30:00"\r\n'
+    CSV = (
+        HEADER
+        + '"Integration User","Web","1","INT-MOD-A","Base-A","120V","Opt-A","New","2024-07-31 10:00:00"\r\n'
+        + '"Another User","Mail","2","INT-MOD-B","Base-B","240V","Opt-B","Parts Pulled","2024-07-31 11:30:00"\r\n'
+    )
+
+    def _fake_driver(self, scraper):
+        driver = MagicMock()
+        button = MagicMock()
+
+        def click():
+            with open(os.path.join(scraper.download_dir, 'orders.csv'), 'w', encoding='utf-8-sig') as f:
+                f.write(self.CSV)
+
+        button.click.side_effect = click
+        driver.find_elements.return_value = [button]
+        return driver
+
+    @patch('orders.scraper.time.sleep')
+    @patch('orders.scraper.WebDriverWait')
+    def test_run_downloads_parses_and_updates(self, mock_wait, mock_sleep):
+        scraper = DecwareOrderScraper()
+        driver = self._fake_driver(scraper)
+
+        with patch.object(DecwareOrderScraper, '_init_driver', return_value=driver):
+            self.assertTrue(scraper.run())
+
+        driver.quit.assert_called_once()
+        self.assertEqual(
+            dict(OrderRecord.objects.values_list('customer_name', 'status')),
+            {'Integration User': 'NEW', 'Another User': 'PARTS_PULLED'},
         )
-        # Write with utf-8-sig encoding to mimic potential real download
-        with open(self.dummy_csv_path, 'w', encoding='utf-8-sig') as f:
-            f.write(self.csv_content)
+        # The temporary download directory is removed
+        self.assertIsNone(scraper.download_dir)
 
-        # Instantiate scraper
-        self.scraper = DecwareOrderScraper()
-        # Override the download directory to our temp one BEFORE calling download
-        self.scraper.download_dir = self.temp_download_dir
-        # Prevent actual file cleanup by the scraper
-        self.scraper.cleanup = lambda: None
-        
-        # Set TESTING flag in settings
-        setattr(settings, 'TESTING', True)
-        
-        # Create test data for parse_csv
-        self.scraper.test_data = [
-            {
-                'customer_name': 'Integration User',
-                'origin': 'Web',
-                'quantity': 1,
-                'model': 'INT-MOD-A',
-                'base': 'Base-A',
-                'volts': '120V',
-                'options': 'Opt-A',
-                'status': 'NEW',
-                'order_date': timezone.make_aware(datetime.datetime(2024, 7, 31, 10, 0, 0))
-            },
-            {
-                'customer_name': 'Another User',
-                'origin': 'Mail',
-                'quantity': 2,
-                'model': 'INT-MOD-B',
-                'base': 'Base-B',
-                'volts': '240V',
-                'options': 'Opt-B',
-                'status': 'PARTS_PULLED',
-                'order_date': timezone.make_aware(datetime.datetime(2024, 7, 31, 11, 30, 0))
-            }
-        ]
+    def test_run_fails_and_cleans_up_when_driver_unavailable(self):
+        scraper = DecwareOrderScraper()
 
-    def tearDown(self):
-        """Clean up the temporary download directory."""
-        shutil.rmtree(self.temp_download_dir)
-        
-        # Reset TESTING flag
-        setattr(settings, 'TESTING', False)
+        with patch.object(DecwareOrderScraper, '_init_driver', return_value=None):
+            self.assertFalse(scraper.run())
 
-    @patch('orders.scraper.webdriver.Chrome') # Mock the browser object creation
-    @patch('orders.scraper.os.path.getctime') # Mock file timestamp check
-    @patch('orders.scraper.os.listdir')      # Mock directory listing
-    @patch('orders.scraper.WebDriverWait')    # Mock the explicit wait
-    def test_download_and_parse_integration(self, mock_wait, mock_listdir, mock_getctime, MockWebDriver):
-        """
-        Test the integration of downloading (mocked) and parsing a CSV file.
-        Mocks the actual browser interaction but tests file handling and parsing coordination.
-        """
-        # --- Arrange Mocks --- 
-        # Mock the driver instance returned by Chrome()
-        mock_driver = MockWebDriver.return_value
-        self.scraper.driver = mock_driver # Ensure scraper uses the mock driver
+        self.assertIsNone(scraper.download_dir)
 
-        # --- Setup Mock Behavior --- 
-        # Mock the WebDriverWait().until() call to return a mock button immediately
-        mock_button = MagicMock()
-        mock_wait_instance = mock_wait.return_value
-        mock_wait_instance.until.return_value = mock_button
-
-        # Mock os functions to simulate immediate file discovery in download_csv loop
-        dummy_filename = os.path.basename(self.dummy_csv_path)
-        mock_listdir.return_value = [dummy_filename]
-        mock_getctime.return_value = time.time() # Just need a consistent value
-        
-        # --- Act --- 
-        # Call download_csv. It should use mocked browser and mocked os functions.
-        returned_path = self.scraper.download_csv()
-
-        # Verify that the download process returned the expected path
-        self.assertEqual(returned_path, self.dummy_csv_path)
-
-        # Now, use the returned path to parse the CSV
-        parsed_data = self.scraper.parse_csv(returned_path)
-
-        # --- Assert --- 
-        # Check if the parsed data matches the contents of our dummy CSV
-        self.assertEqual(len(parsed_data), 2)
-        self.assertEqual(parsed_data[0]['customer_name'], 'Integration User')
-        self.assertEqual(parsed_data[0]['status'], 'NEW')
-        self.assertEqual(parsed_data[1]['customer_name'], 'Another User')
-        self.assertEqual(parsed_data[1]['status'], 'PARTS_PULLED')
-
-# ==================================
-# Database Update Tests
-# ==================================
+    def test_driver_never_launches_in_tests(self):
+        with self.assertRaises(RuntimeError):
+            DecwareOrderScraper()._init_driver()

@@ -3,13 +3,8 @@ import { CircularProgress, Box } from '@mui/material';
 
 const LoadingSpinner = () => {
   return (
-    <Box
-      display="flex"
-      justifyContent="center"
-      alignItems="center"
-      minHeight="200px"
-    >
-      <CircularProgress />
+    <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
+      <CircularProgress data-testid="loading-indicator" />
     </Box>
   );
 };

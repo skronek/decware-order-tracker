@@ -1,10 +1,7 @@
 from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
-from django.utils import timezone
-from .models import OrderRecord, StatusHistory, StatusMetrics
-from decimal import Decimal
-import datetime
+from .models import OrderRecord, StatusHistory
 
 class OrderRecordViewSetTests(APITestCase):
     """Tests for the OrderRecordViewSet API endpoints."""
@@ -84,47 +81,48 @@ class OrderRecordViewSetTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(len(response.data['results']), 0)
 
-class StatusMetricsViewSetTests(APITestCase):
-    """Tests for the StatusMetricsViewSet API endpoints."""
+class OrderRecordFilteringAndOrderingTests(APITestCase):
+    """Multi-field exact-match filtering and ordering on the order list."""
     @classmethod
     def setUpTestData(cls):
-        cls.metric1 = StatusMetrics.objects.create(
-            status='TESTING',
-            average_time_days=Decimal('5.5'),
-            sample_size=10,
-            confidence_level='HIGH'
+        cls.order1 = OrderRecord.objects.create(
+            customer_name="Api Test User 1", origin="USA", model="UFO", base="Std", volts="120", status="NEW"
         )
-        cls.metric2 = StatusMetrics.objects.create(
-            status='QUALITY_CONTROL',
-            average_time_days=Decimal('2.1'),
-            sample_size=15,
-            confidence_level='MEDIUM'
+        cls.order2 = OrderRecord.objects.create(
+            customer_name="Api Test User 2", origin="CAN", model="SE84", base="Anniv", volts="240", status="ON_BENCH"
         )
-        # Note: URL name likely based on model name 'statusmetrics'
-        cls.list_url = reverse('orders:metrics-list') # Correct name based on basename='metrics'
-        # Note: lookup_field is 'status', so use it in kwargs
-        cls.detail_url = reverse('orders:metrics-detail', kwargs={'status': cls.metric1.status})
-        cls.non_existent_url = reverse('orders:metrics-detail', kwargs={'status': 'NON_EXISTENT'})
+        # Same details as order1, different status
+        cls.order3 = OrderRecord.objects.create(
+            customer_name="Api Test User 1", origin="USA", model="UFO", base="Std", volts="120", status="TESTING"
+        )
+        cls.list_url = reverse('orders:order-list')
 
-    def test_list_metrics(self):
-        """Ensure we can list all status metrics."""
-        response = self.client.get(self.list_url)
+    def test_filter_by_all_key_fields(self):
+        params = {'customer_name': 'Api Test User 2', 'origin': 'CAN', 'model': 'SE84', 'base': 'Anniv', 'volts': '240'}
+        response = self.client.get(self.list_url, params)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        # Check the 'count' for pagination-aware result length
-        # If this fails because count is 4, it means other metrics exist in the test DB
-        self.assertEqual(response.data['count'], 2)
+        self.assertEqual([r['id'] for r in response.data['results']], [self.order2.pk])
 
-    def test_retrieve_metric(self):
-        """Ensure we can retrieve a single status metric by its status name."""
-        response = self.client.get(self.detail_url)
+    def test_filter_by_key_fields_and_status(self):
+        params = {'customer_name': 'Api Test User 1', 'origin': 'USA', 'model': 'UFO', 'base': 'Std', 'volts': '120'}
+        response = self.client.get(self.list_url, {**params, 'status': 'TESTING'})
+        self.assertEqual([r['id'] for r in response.data['results']], [self.order3.pk])
+        response = self.client.get(self.list_url, {**params, 'status': 'NEW'})
+        self.assertEqual([r['id'] for r in response.data['results']], [self.order1.pk])
+
+    def test_filter_by_key_fields_not_found(self):
+        params = {'customer_name': 'NonExistent', 'origin': 'XXX', 'model': 'YYY', 'base': 'ZZZ', 'volts': '000'}
+        response = self.client.get(self.list_url, params)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data['status'], self.metric1.status)
-        self.assertEqual(response.data['average_time_days'], 5.5) # It's actually a float/number
+        self.assertEqual(response.data['count'], 0)
 
-    def test_retrieve_non_existent_metric(self):
-        """Ensure retrieving a non-existent metric returns 404 Not Found."""
-        response = self.client.get(self.non_existent_url)
-        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+    def test_ordering_by_time_created(self):
+        response = self.client.get(self.list_url, {'ordering': 'time_created'})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            [r['id'] for r in response.data['results']],
+            [self.order1.pk, self.order2.pk, self.order3.pk],
+        )
 
 class StatusHistoryViewSetTests(APITestCase):
     """Tests for the StatusHistoryViewSet API endpoints."""

@@ -9,12 +9,12 @@ import {
   TimelineOppositeContent,
 } from '@mui/lab';
 import { Typography, Paper } from '@mui/material';
-import { formatStatus, statusColor } from '../utils/orderFormat';
+import { formatDate, formatStatus, statusColor } from '../utils/orderFormat';
 
 // Unobserved rows (an order's first status, or a change spotted after missed scraper
 // runs) weren't timestamped when the change happened, only when it was first noticed
 const formatWhen = (item) => {
-  const date = new Date(item.timestamp).toLocaleDateString();
+  const date = formatDate(item.timestamp);
   return item.is_observed === false ? `First seen ${date}` : date;
 };
 

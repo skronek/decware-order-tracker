@@ -6,23 +6,10 @@ import { useApi } from '../hooks/useApi';
 import { getOrders } from '../features/orders/api/get-orders';
 
 const SearchPage = () => {
-  // Use the API hook to manage state for the order lookup
-  const { 
-    data: searchResults, // Rename data to searchResults for clarity
-    error, 
-    loading, 
-    execute: performSearch // Rename execute for clarity
-  } = useApi(getOrders); // Pass the API function to the hook
+  const { data, error, loading, execute } = useApi(getOrders);
 
-  // Define the handler function to be passed to SearchForm
-  const handleSearch = async (formData) => {
-    // The useApi hook's execute function takes the parameters for getOrders
-    try {
-      await performSearch(formData);
-    } catch {
-      // useApi stores the error, and SearchResults displays it
-    }
-  };
+  // useApi keeps the error in state, and SearchResults shows it
+  const handleSearch = (formData) => execute(formData).catch(() => {});
 
   return (
     <Container maxWidth="lg">
@@ -34,8 +21,7 @@ const SearchPage = () => {
           Enter your Customer Name, Origin, Model, Base, and Volts to find your specific order.
         </Typography>
         <SearchForm onSearch={handleSearch} />
-        {/* Pass the state from the useApi hook to SearchResults */}
-        <SearchResults results={searchResults} error={error} loading={loading} /> 
+        <SearchResults results={data} error={error} loading={loading} />
       </Box>
     </Container>
   );

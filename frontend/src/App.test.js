@@ -2,21 +2,13 @@ import React from 'react';
 import { render, screen } from '@testing-library/react';
 import App from './App';
 
-// Mock react-router-dom
-jest.mock('react-router-dom');
-
-// Mock components
-jest.mock('./components/SearchForm', () => ({
-  SearchForm: () => <div data-testid="search-form">Search Form</div>,
-}));
-
-jest.mock('./components/SearchResults', () => ({
-  SearchResults: () => <div data-testid="search-results">Search Results</div>,
-}));
+// Render the real router; src/__mocks__/react-router-dom.js stubs it out
+jest.unmock('react-router-dom');
 
 describe('App', () => {
-  it('renders without crashing', () => {
+  it('renders the home page inside the layout', () => {
     render(<App />);
-    expect(screen.getByText(/decware order tracker/i)).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 1, name: /decware order tracker/i })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /search orders/i })).toBeInTheDocument();
   });
 });

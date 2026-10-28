@@ -1,25 +1,24 @@
 from django.shortcuts import render
 from django.conf import settings
-from django.views.generic import TemplateView
+from django.template import TemplateDoesNotExist
 from django.views.decorators.cache import never_cache
-from django.http import HttpResponse
-import os
 import logging
 
 logger = logging.getLogger(__name__)
 
-# Serve the React frontend
+
 @never_cache
 def index(request):
     """
-    View to serve the React frontend
+    Serves the React frontend. Its index.html is copied into the templates
+    directory by heroku-build.sh; without a build, show the API landing page.
     """
     try:
-        # First try to serve the React app from the templates directory
         return render(request, 'react/index.html')
-    except Exception as e:
-        logger.error(f"Error serving React frontend: {str(e)}")
+    except TemplateDoesNotExist:
+        logger.error("React frontend build not found (templates/react/index.html)")
         return api_landing_page(request)
+
 
 def api_landing_page(request):
     """

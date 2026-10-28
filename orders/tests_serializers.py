@@ -1,8 +1,7 @@
 from django.test import TestCase
 from django.utils import timezone
-from .models import OrderRecord, StatusHistory
-from .serializers import StatusHistorySerializer, OrderRecordSerializer, StatusMetricsSerializer
-from decimal import Decimal
+from .models import OrderEstimate, OrderRecord, StatusHistory
+from .serializers import StatusHistorySerializer, OrderRecordSerializer
 import datetime
 
 class StatusHistorySerializerTests(TestCase):
@@ -90,46 +89,38 @@ class OrderRecordSerializerTests(TestCase):
         self.assertEqual(data['status_history'][1]['previous_status'], 'NEW')
         self.assertEqual(data['status_history'][1]['timestamp'], self.hist1_ts.isoformat().replace('+00:00', 'Z'))
 
-class StatusMetricsSerializerTests(TestCase):
-    """Tests for the StatusMetricsSerializer."""
-    def test_serialization(self):
-        """Test that the serializer outputs the expected fields and values."""
-        # Mock input data similar to what the view might provide
-        mock_metrics_data = {
-            'status': 'TESTING',
-            'average_time_days': Decimal('10.5'),
-            'sample_size': 20,
-            'confidence_level': 'HIGH',
-            'last_updated': timezone.now()
-        }
+    def test_estimated_completion_from_stored_estimate(self):
+        """estimated_completion comes from the stored OrderEstimate, with days_remaining from today."""
+        today = timezone.localdate()
+        OrderEstimate.objects.create(
+            order=self.order,
+            estimated_date=today + datetime.timedelta(days=20),
+            range_end_date=today + datetime.timedelta(days=30),
+            queue_position=None,
+            confidence_level="MEDIUM",
+            explanation="Being built.",
+            computed_at=timezone.now(),
+        )
+        order = OrderRecord.objects.get(pk=self.order.pk)
+        est = OrderRecordSerializer(instance=order).data['estimated_completion']
+        self.assertEqual(est['days_remaining'], 20)
+        self.assertEqual(est['estimated_date'], (today + datetime.timedelta(days=20)).isoformat())
+        self.assertEqual(est['range_end_date'], (today + datetime.timedelta(days=30)).isoformat())
+        self.assertEqual(est['confidence_level'], 'MEDIUM')
+        self.assertEqual(est['explanation'], 'Being built.')
 
-        serializer = StatusMetricsSerializer(instance=mock_metrics_data)
-        data = serializer.data
+    def test_days_remaining_never_negative(self):
+        today = timezone.localdate()
+        OrderEstimate.objects.create(
+            order=self.order,
+            estimated_date=today - datetime.timedelta(days=3),
+            range_end_date=today,
+            confidence_level="LOW",
+            computed_at=timezone.now(),
+        )
+        order = OrderRecord.objects.get(pk=self.order.pk)
+        self.assertEqual(OrderRecordSerializer(instance=order).data['estimated_completion']['days_remaining'], 0)
 
-        self.assertEqual(len(data.keys()), 5) # Expecting 5 fields
-        self.assertEqual(data['status'], 'TESTING')
-        # Ensure field name and type (Decimal) are correct
-        self.assertEqual(data['average_time_days'], Decimal('10.5'))
-        self.assertEqual(data['sample_size'], 20)
-        self.assertEqual(data['confidence_level'], 'HIGH')
-        self.assertIn('last_updated', data) # Check presence and format
-        self.assertIsNotNone(data['last_updated'])
-
-    def test_serialization_with_nulls(self):
-        """Test serialization when some metrics might be None."""
-        mock_metrics_data = {
-            'status': 'NEW',
-            'average_time_days': None, # Example: No avg time calculated yet
-            'sample_size': 0,
-            'confidence_level': 'LOW',
-            'last_updated': None
-        }
-
-        serializer = StatusMetricsSerializer(instance=mock_metrics_data)
-        data = serializer.data
-
-        self.assertEqual(data['status'], 'NEW')
-        self.assertIsNone(data['average_time_days'])
-        self.assertEqual(data['sample_size'], 0)
-        self.assertEqual(data['confidence_level'], 'LOW')
-        self.assertIsNone(data['last_updated'])
+    def test_estimated_completion_without_estimate(self):
+        """Orders without a stored estimate (e.g. finished ones) have no estimated_completion."""
+        self.assertIsNone(OrderRecordSerializer(instance=self.order).data['estimated_completion'])

@@ -5,18 +5,16 @@ import {
   Box,
   Paper,
   Typography,
-  CircularProgress,
   Divider,
   Chip,
   Button,
 } from '@mui/material';
-import Grid from '@mui/material/Grid'; // Correct import path for MUI v7+ Grid
-import { useOrderDetails } from '../hooks/useOrderDetails';
-import { StatusHistoryTimeline } from './StatusHistoryTimeline';
-import { getSavedOrderIds, saveOrderIds } from '../utils/storage';
-import { formatStatus, statusColor, isFinished, formatEstCompletion, formatConfidence } from '../utils/orderFormat';
-
-const formatDate = (dateString) => (dateString ? new Date(dateString).toLocaleDateString() : 'N/A');
+import Grid from '@mui/material/Grid';
+import { useOrderDetails } from '../api/use-order-details';
+import { StatusHistoryTimeline } from '../../../components/StatusHistoryTimeline';
+import LoadingSpinner from '../../../components/common/LoadingSpinner';
+import { addOrderId, isOrderSaved, removeOrderId } from '../../../utils/storage';
+import { formatDate, formatStatus, statusColor, isFinished, formatEstCompletion, formatConfidence } from '../../../utils/orderFormat';
 
 // A label/value pair in the details grid
 const Field = ({ label, children, testId, sm = 4 }) => (
@@ -70,35 +68,25 @@ const EstimateSection = ({ order }) => {
 
 export const OrderDetails = () => {
   const { orderId } = useParams();
-  const { orderDetails, loading, error } = useOrderDetails(orderId);
+  const { order, loading, error } = useOrderDetails(orderId);
   const [isSaved, setIsSaved] = useState(false);
 
-  // Check saved status on component mount
   useEffect(() => {
-    const savedIds = getSavedOrderIds();
-    setIsSaved(savedIds.includes(orderId));
+    setIsSaved(isOrderSaved(orderId));
   }, [orderId]);
 
   const handleSave = () => {
-    const savedIds = getSavedOrderIds();
-    if (!savedIds.includes(orderId)) {
-      saveOrderIds([...savedIds, orderId]);
-    }
+    addOrderId(orderId);
     setIsSaved(true);
   };
 
   const handleUnsave = () => {
-    const savedIds = getSavedOrderIds();
-    saveOrderIds(savedIds.filter(id => id !== orderId));
+    removeOrderId(orderId);
     setIsSaved(false);
   };
 
   if (loading) {
-    return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
-        <CircularProgress data-testid="loading-indicator" />
-      </Box>
-    );
+    return <LoadingSpinner />;
   }
 
   if (error) {
@@ -113,7 +101,7 @@ export const OrderDetails = () => {
     );
   }
 
-  if (!orderDetails) {
+  if (!order) {
     return (
       <Box sx={{ p: 3 }}>
         <Paper sx={{ p: 2 }}>
@@ -122,8 +110,6 @@ export const OrderDetails = () => {
       </Box>
     );
   }
-
-  const order = orderDetails;
 
   return (
     <Box sx={{ py: 3 }}>
@@ -144,14 +130,9 @@ export const OrderDetails = () => {
           </Box>
           <Button
             variant="contained"
+            color="secondary"
             onClick={isSaved ? handleUnsave : handleSave}
             data-testid="save-button"
-            sx={{
-              bgcolor: '#6c757d',
-              '&:hover': {
-                bgcolor: '#5a6268',
-              }
-            }}
           >
             {isSaved ? 'Unsave Order' : 'Save Order'}
           </Button>

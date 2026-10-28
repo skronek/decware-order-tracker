@@ -41,31 +41,6 @@ class DateParsingTests(TestCase):
         cleaned = self.scraper._clean_date_string(date_with_multiple)
         self.assertEqual(cleaned, "2023-04-15 14:30:00")
     
-    def test_date_parsing_diagnostic(self):
-        """Test the date parsing diagnostic function."""
-        # Test with valid date
-        success, msg, parsed_date = self.scraper._test_date_parsing("2023-04-15 14:30:00")
-        self.assertTrue(success)
-        self.assertIsNotNone(parsed_date)
-        self.assertEqual(parsed_date.year, 2023)
-        self.assertEqual(parsed_date.month, 4)
-        self.assertEqual(parsed_date.day, 15)
-        
-        # Test with invalid date
-        success, msg, parsed_date = self.scraper._test_date_parsing("not-a-date")
-        self.assertFalse(success)
-        self.assertIsNone(parsed_date)
-        
-        # Test with empty string
-        success, msg, parsed_date = self.scraper._test_date_parsing("")
-        self.assertFalse(success)
-        self.assertIsNone(parsed_date)
-        
-        # Test with non-ASCII characters
-        success, msg, parsed_date = self.scraper._test_date_parsing("2023-04-15 14:30:00\u200b")
-        self.assertFalse(success)
-        self.assertIsNone(parsed_date)
-    
     def test_parse_csv_with_problematic_dates(self):
         """Test parsing CSV with problematic date formats."""
         # This is a more complex test that would require creating a temporary CSV file

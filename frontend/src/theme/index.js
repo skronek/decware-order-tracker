@@ -7,10 +7,11 @@ const theme = createTheme({
       light: '#42a5f5',
       dark: '#1565c0',
     },
+    // Grey, for the save and search buttons (use color="secondary")
     secondary: {
-      main: '#9c27b0',
-      light: '#ba68c8',
-      dark: '#7b1fa2',
+      main: '#6c757d',
+      dark: '#5a6268',
+      contrastText: '#ffffff',
     },
     background: {
       default: '#f5f5f5',

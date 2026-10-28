@@ -3,7 +3,12 @@ Test settings for Decware Order Tracker project.
 Uses SQLite for testing to avoid PostgreSQL dependencies.
 """
 
-from .settings import *
+import os
+
+# settings.py requires SECRET_KEY when DEBUG is off
+os.environ.setdefault('SECRET_KEY', 'test-secret-key')
+
+from .settings import *  # noqa: E402
 
 # Use SQLite for testing
 DATABASES = {
@@ -12,9 +17,6 @@ DATABASES = {
         'NAME': BASE_DIR / 'test_db.sqlite3',
     }
 }
-
-# Disable SSL requirement
-DATABASES['default']['OPTIONS'] = {}
 
 # Speed up password hashing during tests
 PASSWORD_HASHERS = [
@@ -32,5 +34,5 @@ CSRF_COOKIE_SECURE = True
 if 'decware_order_tracker.middleware.HerokuHttpsMiddleware' not in MIDDLEWARE:
     MIDDLEWARE = ['decware_order_tracker.middleware.HerokuHttpsMiddleware', *MIDDLEWARE]
 
-# Disable Selenium browser automation during tests
+# Makes DecwareOrderScraper._init_driver refuse to launch Chrome
 TESTING = True

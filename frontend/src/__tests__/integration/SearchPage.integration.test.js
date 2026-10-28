@@ -76,7 +76,6 @@ describe('SearchPage Integration Tests', () => {
     });
     
     // Verify order details are displayed
-    expect(screen.getByText(/Order Details/i)).toBeInTheDocument();
     expect(screen.getByText(/Test Customer/i)).toBeInTheDocument();
     expect(screen.getByText(/ZMA/i)).toBeInTheDocument();
     expect(screen.getByText('On Bench')).toBeInTheDocument();

@@ -1,15 +1,10 @@
 import React from 'react';
 import { render, screen, within, fireEvent } from '@testing-library/react';
-import { OrderDetails } from '../OrderDetails';
-import { useOrderDetails } from '../../hooks/useOrderDetails';
-import { getSavedOrderIds, saveOrderIds } from '../../utils/storage';
+import { OrderDetails } from '../order-details';
+import { getOrder } from '../../api/get-order';
+import { getSavedOrderIds } from '../../../../utils/storage';
 
-// Mock the hooks
-jest.mock('../../hooks/useOrderDetails');
-jest.mock('../../utils/storage', () => ({
-  getSavedOrderIds: jest.fn(),
-  saveOrderIds: jest.fn(),
-}));
+jest.mock('../../api/get-order');
 jest.mock('react-router-dom', () => ({
   useParams: () => ({ orderId: '14775' }),
   Link: require('react').forwardRef(({ to, children, ...rest }, ref) => <a ref={ref} href={to} {...rest}>{children}</a>),
@@ -41,27 +36,25 @@ const mockOrder = {
   },
 };
 
-const renderWith = (order) => {
-  useOrderDetails.mockReturnValue({ orderDetails: order, loading: false, error: null });
-  return render(<OrderDetails />);
+// Renders and waits for the order to load
+const renderWith = async (order) => {
+  getOrder.mockResolvedValue(order);
+  render(<OrderDetails />);
+  await screen.findByTestId('order-details-main');
 };
 
 describe('OrderDetails', () => {
   beforeEach(() => {
-    getSavedOrderIds.mockReturnValue([]);
+    localStorage.clear();
   });
 
-  afterEach(() => {
-    jest.clearAllMocks();
+  it('fetches the order from the URL', async () => {
+    await renderWith(mockOrder);
+    expect(getOrder).toHaveBeenCalledWith('14775');
   });
 
-  it('fetches the order from the URL', () => {
-    renderWith(mockOrder);
-    expect(useOrderDetails).toHaveBeenCalledWith('14775');
-  });
-
-  it('renders the order information', () => {
-    renderWith(mockOrder);
+  it('renders the order information', async () => {
+    await renderWith(mockOrder);
     const main = screen.getByTestId('order-details-main');
     expect(within(main).getByText('Weineng P.')).toBeInTheDocument();
     expect(within(main).getByText('WA')).toBeInTheDocument();
@@ -74,8 +67,8 @@ describe('OrderDetails', () => {
     expect(within(main).getByTestId('status-chip')).toHaveTextContent('New');
   });
 
-  it('renders the estimate', () => {
-    renderWith(mockOrder);
+  it('renders the estimate', async () => {
+    await renderWith(mockOrder);
     const estimate = screen.getByTestId('estimate');
     const start = new Date(2030, 7, 21).toLocaleDateString();
     const end = new Date(2032, 8, 6).toLocaleDateString();
@@ -85,74 +78,70 @@ describe('OrderDetails', () => {
     expect(within(estimate).getByText('Your order is #2,004 in the build queue.')).toBeInTheDocument();
   });
 
-  it('leaves out the queue position for orders being built', () => {
-    renderWith({ ...mockOrder, status: 'ON_BENCH', estimated_completion: { ...mockOrder.estimated_completion, queue_position: null } });
+  it('leaves out the queue position for orders being built', async () => {
+    await renderWith({ ...mockOrder, status: 'ON_BENCH', estimated_completion: { ...mockOrder.estimated_completion, queue_position: null } });
     expect(screen.queryByTestId('queue-position')).not.toBeInTheDocument();
     expect(screen.getByTestId('status-chip')).toHaveTextContent('On Bench');
   });
 
-  it('says a finished order has passed QC instead of estimating it', () => {
-    renderWith({ ...mockOrder, status: 'PASSED_QC_AWAITING_PAYMENT', estimated_completion: null });
+  it('says a finished order has passed QC instead of estimating it', async () => {
+    await renderWith({ ...mockOrder, status: 'PASSED_QC_AWAITING_PAYMENT', estimated_completion: null });
     expect(screen.getByTestId('estimate')).toHaveTextContent('This order has passed quality control.');
     expect(screen.queryByTestId('completion-date')).not.toBeInTheDocument();
   });
 
-  it('notes when an order has dropped off Decware\'s list', () => {
-    renderWith({ ...mockOrder, status: 'TESTING', estimated_completion: null, removed_at: '2026-09-01T12:00:00Z' });
+  it('notes when an order has dropped off Decware\'s list', async () => {
+    await renderWith({ ...mockOrder, status: 'TESTING', estimated_completion: null, removed_at: '2026-09-01T12:00:00Z' });
     expect(screen.getByTestId('removed-notice')).toHaveTextContent(new Date('2026-09-01T12:00:00Z').toLocaleDateString());
     expect(screen.getByTestId('estimate')).not.toHaveTextContent('No estimate yet');
   });
 
-  it('says when an active order has no estimate yet', () => {
-    renderWith({ ...mockOrder, estimated_completion: null });
+  it('says when an active order has no estimate yet', async () => {
+    await renderWith({ ...mockOrder, estimated_completion: null });
     expect(screen.getByTestId('estimate')).toHaveTextContent('No estimate yet');
     expect(screen.queryByTestId('removed-notice')).not.toBeInTheDocument();
   });
 
-  it('renders the status history timeline', () => {
-    renderWith(mockOrder);
+  it('renders the status history timeline', async () => {
+    await renderWith(mockOrder);
     const timeline = screen.getByTestId('status-history-timeline');
     expect(within(timeline).getByText('Status History')).toBeInTheDocument();
     expect(timeline).toHaveTextContent('First seen');
   });
 
-  it('saves and unsaves the order', () => {
-    renderWith(mockOrder);
+  it('saves and unsaves the order', async () => {
+    await renderWith(mockOrder);
     fireEvent.click(screen.getByTestId('save-button'));
-    expect(saveOrderIds).toHaveBeenCalledWith(['14775']);
+    expect(getSavedOrderIds()).toEqual(['14775']);
     expect(screen.getByTestId('save-button')).toHaveTextContent('Unsave Order');
 
-    getSavedOrderIds.mockReturnValue(['14775']);
     fireEvent.click(screen.getByTestId('save-button'));
-    expect(saveOrderIds).toHaveBeenLastCalledWith([]);
+    expect(getSavedOrderIds()).toEqual([]);
     expect(screen.getByTestId('save-button')).toHaveTextContent('Save Order');
   });
 
-  it('shows an already-saved order as saved', () => {
-    getSavedOrderIds.mockReturnValue(['14775']);
-    renderWith(mockOrder);
+  it('shows an order saved under a numeric ID as saved', async () => {
+    localStorage.setItem('savedOrderIds', JSON.stringify([14775]));
+    await renderWith(mockOrder);
     expect(screen.getByTestId('save-button')).toHaveTextContent('Unsave Order');
   });
 
-  it('links back to search', () => {
-    renderWith(mockOrder);
+  it('links back to search', async () => {
+    await renderWith(mockOrder);
     expect(screen.getByRole('link', { name: /Back to search/i })).toHaveAttribute('href', '/search');
   });
 
-  it('shows loading state', () => {
-    useOrderDetails.mockReturnValue({ orderDetails: null, loading: true, error: null });
+  it('shows the loading state, not "not found", until the order arrives', () => {
+    getOrder.mockReturnValue(new Promise(() => {}));
     render(<OrderDetails />);
     expect(screen.getByTestId('loading-indicator')).toBeInTheDocument();
+    expect(screen.queryByText('Order not found.')).not.toBeInTheDocument();
   });
 
-  it('shows error state', () => {
-    useOrderDetails.mockReturnValue({ orderDetails: null, loading: false, error: 'Request failed with status code 404' });
+  it('shows the error message when the request fails', async () => {
+    // lib/api-client.js sets this message on a 404
+    getOrder.mockRejectedValue(new Error('Order not found.'));
     render(<OrderDetails />);
-    expect(screen.getByTestId('error-message')).toHaveTextContent('Request failed with status code 404');
-  });
-
-  it('shows not found message when no order details', () => {
-    renderWith(null);
-    expect(screen.getByText('Order not found.')).toBeInTheDocument();
+    expect(await screen.findByTestId('error-message')).toHaveTextContent('Order not found.');
   });
 });

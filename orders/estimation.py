@@ -149,8 +149,8 @@ def _start_rate(starts, runs, as_of):
     return total / weeks, precise
 
 
-def _build_days(orders, history):
-    """Observed days from leaving NEW to passing QC."""
+def _build_days(orders, history, as_of):
+    """Observed days from leaving NEW to passing QC, as known at `as_of`."""
     samples = []
     for order in orders:
         rows = history.get(order.pk, [])
@@ -161,7 +161,7 @@ def _build_days(orders, history):
                      and r.timestamp > start.timestamp), None)
         if done:
             end = done.timestamp
-        elif (order.removed_at and order.status == 'QUALITY_CONTROL'
+        elif (order.removed_at and order.removed_at <= as_of and order.status == 'QUALITY_CONTROL'
               and order.removed_at - order.last_seen_at <= PRECISE_GAP):
             # Orders now drop off the list right after QC, so leaving from QC counts as passing
             end = order.removed_at
@@ -178,7 +178,7 @@ def build_model(as_of):
         return None, orders, history, runs
     starts = _starts(orders, history, runs, as_of)
     rate, precise = _start_rate(starts.values(), runs, as_of)
-    builds = _build_days(orders, history)
+    builds = _build_days(orders, history, as_of)
     if len(builds) >= MIN_BUILD_SAMPLES:
         typical, late = _percentile(builds, 0.5), _percentile(builds, 0.8)
     else:
@@ -186,7 +186,7 @@ def build_model(as_of):
     return Model(rate, precise, typical, late, len(builds)), orders, history, runs
 
 
-def _confidence(model, days_out, waiting):
+def _confidence(model, waiting, days_out=0):
     if model.build_samples < MIN_BUILD_SAMPLES:
         return 'LOW'
     if not waiting:
@@ -227,7 +227,7 @@ def estimate_orders(as_of=None):
         elapsed = (as_of - started) / DAY
         typical = max(1.0, model.build_typical_days - elapsed)
         late = max(typical, model.build_late_days - elapsed)
-        confidence = _confidence(model, typical, waiting=False)
+        confidence = _confidence(model, waiting=False)
         estimates.append(_estimate(order, as_of, typical, late, None, confidence,
                                    _building_explanation(status, model, elapsed)))
 
@@ -237,7 +237,7 @@ def estimate_orders(as_of=None):
             weeks = (position + 1) / model.starts_per_week
             typical = weeks * 7 + model.build_typical_days
             late = weeks / SLOW_RATE_FACTOR * 7 + model.build_late_days
-            confidence = _confidence(model, typical, waiting=True)
+            confidence = _confidence(model, waiting=True, days_out=typical)
             estimates.append(_estimate(order, as_of, typical, late, position, confidence,
                                        _waiting_explanation(position, model, confidence)))
     return model, estimates
