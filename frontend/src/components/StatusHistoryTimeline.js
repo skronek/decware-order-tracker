@@ -40,7 +40,7 @@ export const StatusHistoryTimeline = ({ statusHistory }) => {
               {formatWhen(item)}
             </TimelineOppositeContent>
             <TimelineSeparator>
-              <TimelineDot color={statusColor(item.new_status)} />
+              <TimelineDot color={statusColor(item.new_status)} data-testid="timeline-dot" />
               {index < sortedHistory.length - 1 && <TimelineConnector />}
             </TimelineSeparator>
             <TimelineContent>{formatStatus(item.new_status)}</TimelineContent>

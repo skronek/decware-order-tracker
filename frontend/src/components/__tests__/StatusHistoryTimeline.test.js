@@ -38,7 +38,7 @@ describe('StatusHistoryTimeline', () => {
 
   it('colors timeline dots by stage', () => {
     render(<StatusHistoryTimeline statusHistory={mockStatusHistory} />);
-    const dots = screen.getAllByRole('listitem').map((item) => item.querySelector('.MuiTimelineDot-root'));
+    const dots = screen.getAllByTestId('timeline-dot');
     expect(dots[0]).toHaveClass('MuiTimelineDot-filledPrimary');
     expect(dots[1]).toHaveClass('MuiTimelineDot-filledWarning');
     expect(dots[2]).toHaveClass('MuiTimelineDot-filledSuccess');
