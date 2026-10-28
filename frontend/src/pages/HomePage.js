@@ -34,9 +34,10 @@ const HomePage = () => {
 
     loadSavedOrders(savedOrderIds).then(({ orders, hasErrors }) => {
       if (ignore) return;
-      // Keep orders tracked while the saved ones were still loading
+      // Skip orders removed while loading, and keep ones tracked meanwhile
+      const stillSavedIds = getSavedOrderIds();
       setSavedOrders((current) => [
-        ...orders,
+        ...orders.filter((order) => stillSavedIds.includes(String(order.id))),
         ...current.filter((order) => !orders.some((loaded) => loaded.id === order.id)),
       ]);
       setError(hasErrors ? 'Some orders could not be loaded.' : null);
@@ -125,7 +126,7 @@ const HomePage = () => {
       <TrackOrderDialog
         open={isTrackDialogOpen}
         onClose={() => setIsTrackDialogOpen(false)}
-        trackedIds={savedOrders.map((order) => String(order.id))}
+        trackedIds={getSavedOrderIds()}
         onTrack={handleTrackOrder}
       />
     </Container>

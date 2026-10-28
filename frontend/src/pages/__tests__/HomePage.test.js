@@ -133,6 +133,19 @@ describe('HomePage track order dialog', () => {
     expect(getSavedOrderIds()).toEqual(['14775', '15001']);
   });
 
+  it('marks saved orders as tracked while they are still loading', async () => {
+    saveIds(['14775']);
+    getOrder.mockReturnValue(new Promise(() => {}));
+    getOrders.mockResolvedValue([savedOrder]);
+    render(<HomePage />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Track order' }));
+    searchFor(fields);
+
+    const result = await within(screen.getByRole('dialog')).findByTestId('order-summary-14775');
+    expect(within(result).getByRole('button', { name: /Tracking/i })).toBeDisabled();
+  });
+
   it('shows search errors inside the dialog', async () => {
     getOrders.mockRejectedValue(new Error('Server error'));
     render(<HomePage />);
