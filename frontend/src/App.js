@@ -1,11 +1,10 @@
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { ThemeProvider } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
 import theme from './theme';
 import Layout from './components/layout/Layout';
 import HomePage from './pages/HomePage';
-import SearchPage from './pages/SearchPage';
 import OrderDetailsPage from './pages/OrderDetailsPage';
 import ErrorBoundary from './components/common/ErrorBoundary';
 
@@ -26,7 +25,8 @@ function App() {
             <PageErrorBoundary>
               <Routes>
                 <Route path="/" element={<HomePage />} />
-                <Route path="/search" element={<SearchPage />} />
+                {/* Old bookmarks: search now lives in a dialog on the home page */}
+                <Route path="/search" element={<Navigate to="/" replace />} />
                 <Route path="/orders/:orderId" element={<OrderDetailsPage />} />
               </Routes>
             </PageErrorBoundary>

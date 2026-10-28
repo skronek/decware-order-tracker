@@ -2,8 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { Typography, Container, Box, Paper, Divider, Button, Link as MuiLink } from '@mui/material';
 import LoadingSpinner from '../components/common/LoadingSpinner';
 import { OrderSummary } from '../components/order-summary';
-import { getSavedOrderIds, removeOrderId } from '../utils/storage';
+import { getSavedOrderIds, addOrderId, removeOrderId } from '../utils/storage';
 import { getOrder } from '../features/orders/api/get-order';
+import { TrackOrderDialog } from '../features/orders/components/track-order-dialog';
 
 // Fetches each saved order. IDs the API no longer knows (404) are dropped from storage.
 const loadSavedOrders = async (ids) => {
@@ -25,6 +26,7 @@ const HomePage = () => {
   const [savedOrders, setSavedOrders] = useState([]);
   const [isLoading, setIsLoading] = useState(savedOrderIds.length > 0);
   const [error, setError] = useState(null);
+  const [isTrackDialogOpen, setIsTrackDialogOpen] = useState(false);
 
   useEffect(() => {
     if (savedOrderIds.length === 0) return;
@@ -32,7 +34,11 @@ const HomePage = () => {
 
     loadSavedOrders(savedOrderIds).then(({ orders, hasErrors }) => {
       if (ignore) return;
-      setSavedOrders(orders);
+      // Keep orders tracked while the saved ones were still loading
+      setSavedOrders((current) => [
+        ...orders,
+        ...current.filter((order) => !orders.some((loaded) => loaded.id === order.id)),
+      ]);
       setError(hasErrors ? 'Some orders could not be loaded.' : null);
       setIsLoading(false);
     });
@@ -41,6 +47,11 @@ const HomePage = () => {
       ignore = true;
     };
   }, [savedOrderIds]);
+
+  const handleTrackOrder = (order) => {
+    addOrderId(order.id);
+    setSavedOrders((orders) => (orders.some((saved) => saved.id === order.id) ? orders : [...orders, order]));
+  };
 
   const handleRemoveOrder = (orderId) => {
     removeOrderId(orderId);
@@ -72,41 +83,51 @@ const HomePage = () => {
         </Typography>
       </Box>
 
-      {savedOrderIds.length > 0 && (
-        <Box sx={{ my: 4 }}>
-          <Divider sx={{ mb: 3 }} />
-          <Typography variant="h5" component="h2" gutterBottom>
+      <Box sx={{ my: 4 }}>
+        <Divider sx={{ mb: 3 }} />
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2, mb: 2 }}>
+          <Typography variant="h5" component="h2">
             Your Saved Orders
           </Typography>
-          {isLoading && <LoadingSpinner />}
-          {error && (
-            <Paper sx={{ p: 2, mb: 2, bgcolor: 'error.light', color: 'error.contrastText' }}>
-              <Typography data-testid="saved-order-error">{error}</Typography>
-            </Paper>
-          )}
-          {savedOrders.length > 0 && (
-            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-              {savedOrders.map((order) => (
-                <OrderSummary key={order.id} order={order}>
-                  <Button
-                    variant="outlined"
-                    color="error"
-                    onClick={() => handleRemoveOrder(order.id)}
-                    data-testid={`remove-order-${order.id}`}
-                  >
-                    Remove
-                  </Button>
-                </OrderSummary>
-              ))}
-            </Box>
-          )}
-          {savedOrders.length === 0 && !isLoading && !error && (
-            <Paper sx={{ p: 3, bgcolor: 'info.light' }}>
-              <Typography>No saved orders to display.</Typography>
-            </Paper>
-          )}
+          <Button variant="contained" color="secondary" onClick={() => setIsTrackDialogOpen(true)}>
+            Track order
+          </Button>
         </Box>
-      )}
+        {isLoading && <LoadingSpinner />}
+        {error && (
+          <Paper sx={{ p: 2, mb: 2, bgcolor: 'error.light', color: 'error.contrastText' }}>
+            <Typography data-testid="saved-order-error">{error}</Typography>
+          </Paper>
+        )}
+        {savedOrders.length > 0 && (
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            {savedOrders.map((order) => (
+              <OrderSummary key={order.id} order={order}>
+                <Button
+                  variant="outlined"
+                  color="error"
+                  onClick={() => handleRemoveOrder(order.id)}
+                  data-testid={`remove-order-${order.id}`}
+                >
+                  Remove
+                </Button>
+              </OrderSummary>
+            ))}
+          </Box>
+        )}
+        {savedOrders.length === 0 && !isLoading && !error && (
+          <Paper sx={{ p: 3, bgcolor: 'info.light' }}>
+            <Typography>You aren't tracking any orders yet. Use Track order to find yours.</Typography>
+          </Paper>
+        )}
+      </Box>
+
+      <TrackOrderDialog
+        open={isTrackDialogOpen}
+        onClose={() => setIsTrackDialogOpen(false)}
+        trackedIds={savedOrders.map((order) => String(order.id))}
+        onTrack={handleTrackOrder}
+      />
     </Container>
   );
 };

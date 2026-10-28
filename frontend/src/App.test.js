@@ -9,6 +9,6 @@ describe('App', () => {
   it('renders the home page inside the layout', () => {
     render(<App />);
     expect(screen.getByRole('heading', { level: 1, name: /decware order tracker/i })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /search orders/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /track order/i })).toBeInTheDocument();
   });
 });

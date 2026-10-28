@@ -162,8 +162,8 @@ export const OrderDetails = () => {
       <StatusHistoryTimeline statusHistory={order.status_history} />
 
       <Box sx={{ mt: 3 }}>
-        <Button component={Link} to="/search">
-          Back to search
+        <Button component={Link} to="/">
+          Back to my orders
         </Button>
       </Box>
     </Box>

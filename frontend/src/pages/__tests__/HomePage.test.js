@@ -1,10 +1,12 @@
 import React from 'react';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, within, waitFor } from '@testing-library/react';
 import HomePage from '../HomePage';
 import { SAVED_ORDERS_KEY, getSavedOrderIds } from '../../utils/storage';
 import { getOrder } from '../../features/orders/api/get-order';
+import { getOrders } from '../../features/orders/api/get-orders';
 
 jest.mock('../../features/orders/api/get-order');
+jest.mock('../../features/orders/api/get-orders');
 
 const savedOrder = {
   id: 14775,
@@ -43,7 +45,7 @@ describe('HomePage saved orders', () => {
     fireEvent.click(screen.getByTestId('remove-order-14775'));
 
     expect(screen.queryByTestId('order-summary-14775')).not.toBeInTheDocument();
-    expect(screen.getByText('No saved orders to display.')).toBeInTheDocument();
+    expect(screen.getByText(/You aren't tracking any orders yet/)).toBeInTheDocument();
     expect(getSavedOrderIds()).toEqual([]);
     expect(getOrder).toHaveBeenCalledTimes(1);
   });
@@ -66,5 +68,78 @@ describe('HomePage saved orders', () => {
 
     expect(await screen.findByTestId('saved-order-error')).toHaveTextContent('Some orders could not be loaded.');
     expect(getSavedOrderIds()).toEqual(['14775']);
+  });
+});
+
+describe('HomePage track order dialog', () => {
+  const newOrder = { ...savedOrder, id: 15001, customer_name: 'Pat Q.', model: 'ZMA', status: 'IN_QUEUE' };
+
+  const searchFor = (fields) => {
+    const dialog = screen.getByRole('dialog');
+    fields.forEach(([label, value]) => {
+      fireEvent.change(within(dialog).getByLabelText(label), { target: { value } });
+    });
+    fireEvent.click(within(dialog).getByRole('button', { name: /^Search$/ }));
+  };
+
+  const fields = [[/Customer Name/, 'Pat Q.'], [/Origin/, 'WA'], [/Model/, 'ZMA'], [/Volts/, '120V']];
+
+  beforeEach(() => {
+    localStorage.clear();
+    jest.clearAllMocks();
+  });
+
+  it('shows the Track order button even with nothing saved', () => {
+    render(<HomePage />);
+    expect(screen.getByRole('heading', { name: 'Your Saved Orders' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Track order' })).toBeInTheDocument();
+    expect(getOrder).not.toHaveBeenCalled();
+  });
+
+  it('searches in the dialog and adds the picked order as a card', async () => {
+    getOrders.mockResolvedValue([newOrder]);
+    render(<HomePage />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Track order' }));
+    searchFor(fields);
+
+    expect(getOrders).toHaveBeenCalledWith({ customer_name: 'Pat Q.', origin: 'WA', model: 'ZMA', base: '', volts: '120V' });
+    const result = await within(screen.getByRole('dialog')).findByTestId('order-summary-15001');
+    fireEvent.click(within(result).getByRole('button', { name: /Track this order/i }));
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(screen.getByTestId('order-summary-15001')).toHaveTextContent('Pat Q.');
+    expect(getSavedOrderIds()).toEqual(['15001']);
+  });
+
+  it('adds more orders next to the saved ones and marks tracked results', async () => {
+    saveIds(['14775']);
+    getOrder.mockResolvedValue(savedOrder);
+    getOrders.mockResolvedValue([savedOrder, newOrder]);
+    render(<HomePage />);
+    await screen.findByTestId('order-summary-14775');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Track order' }));
+    searchFor(fields);
+
+    const dialog = screen.getByRole('dialog');
+    const saved = await within(dialog).findByTestId('order-summary-14775');
+    expect(within(saved).getByRole('button', { name: /Tracking/i })).toBeDisabled();
+    fireEvent.click(within(within(dialog).getByTestId('order-summary-15001')).getByRole('button', { name: /Track this order/i }));
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(screen.getByTestId('order-summary-14775')).toBeInTheDocument();
+    expect(screen.getByTestId('order-summary-15001')).toBeInTheDocument();
+    expect(getSavedOrderIds()).toEqual(['14775', '15001']);
+  });
+
+  it('shows search errors inside the dialog', async () => {
+    getOrders.mockRejectedValue(new Error('Server error'));
+    render(<HomePage />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Track order' }));
+    searchFor(fields);
+
+    expect(await within(screen.getByRole('dialog')).findByTestId('error-message')).toHaveTextContent('Server error');
   });
 });

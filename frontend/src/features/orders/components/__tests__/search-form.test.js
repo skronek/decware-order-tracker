@@ -1,7 +1,7 @@
 import React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
 import '@testing-library/jest-dom';
-import { SearchForm } from '../SearchForm';
+import { SearchForm } from '../search-form';
 
 describe('SearchForm', () => {
   const mockOnSearch = jest.fn();

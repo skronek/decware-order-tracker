@@ -1,25 +1,10 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { Box, Paper, Typography, Button } from '@mui/material';
-import LoadingSpinner from './common/LoadingSpinner';
-import { OrderSummary } from './order-summary';
-import { addOrderId, isOrderSaved } from '../utils/storage';
+import LoadingSpinner from '../../../components/common/LoadingSpinner';
+import { OrderSummary } from '../../../components/order-summary';
 
-const SaveOrderButton = ({ orderId }) => {
-  const [isSaved, setIsSaved] = useState(() => isOrderSaved(orderId));
-
-  const handleSave = () => {
-    addOrderId(orderId);
-    setIsSaved(true);
-  };
-
-  return (
-    <Button variant="contained" color="secondary" onClick={handleSave} disabled={isSaved}>
-      {isSaved ? 'Saved' : 'Save This Order'}
-    </Button>
-  );
-};
-
-export const SearchResults = ({ results, loading, error }) => {
+// trackedIds are the saved order IDs (strings); onTrack(order) is called when the user picks one.
+export const SearchResults = ({ results, loading, error, trackedIds = [], onTrack }) => {
   if (loading) {
     return <LoadingSpinner />;
   }
@@ -62,7 +47,14 @@ export const SearchResults = ({ results, loading, error }) => {
       )}
       {results.map((order) => (
         <OrderSummary key={order.id} order={order}>
-          <SaveOrderButton orderId={order.id} />
+          <Button
+            variant="contained"
+            color="secondary"
+            onClick={() => onTrack(order)}
+            disabled={trackedIds.includes(String(order.id))}
+          >
+            {trackedIds.includes(String(order.id)) ? 'Tracking' : 'Track this order'}
+          </Button>
         </OrderSummary>
       ))}
     </Box>
