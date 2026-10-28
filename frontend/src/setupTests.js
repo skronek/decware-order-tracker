@@ -14,7 +14,6 @@ window.matchMedia = window.matchMedia || function() {
 
 // Mock MutationObserver
 global.MutationObserver = class {
-  constructor(callback) {}
   disconnect() {}
   observe(element, initObject) {}
 };
