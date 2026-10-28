@@ -10,11 +10,11 @@ import {
   Button,
 } from '@mui/material';
 import Grid from '@mui/material/Grid';
-import { useOrderDetails } from '../features/orders/api/use-order-details';
-import { StatusHistoryTimeline } from './StatusHistoryTimeline';
-import LoadingSpinner from './common/LoadingSpinner';
-import { addOrderId, isOrderSaved, removeOrderId } from '../utils/storage';
-import { formatDate, formatStatus, statusColor, isFinished, formatEstCompletion, formatConfidence } from '../utils/orderFormat';
+import { useOrderDetails } from '../api/use-order-details';
+import { StatusHistoryTimeline } from '../../../components/StatusHistoryTimeline';
+import LoadingSpinner from '../../../components/common/LoadingSpinner';
+import { addOrderId, isOrderSaved, removeOrderId } from '../../../utils/storage';
+import { formatDate, formatStatus, statusColor, isFinished, formatEstCompletion, formatConfidence } from '../../../utils/orderFormat';
 
 // A label/value pair in the details grid
 const Field = ({ label, children, testId, sm = 4 }) => (

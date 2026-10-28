@@ -6,7 +6,7 @@ import datetime
 from django.test import TestCase
 from django.utils import timezone
 
-from .estimation import DEFAULT_BUILD_DAYS, SLOW_RATE_FACTOR, backtest, compute_estimates, estimate_orders
+from .estimation import DEFAULT_BUILD_DAYS, SLOW_RATE_FACTOR, _left_new, backtest, compute_estimates, estimate_orders
 from .models import OrderEstimate, OrderRecord, StatusHistory
 
 DAY = datetime.timedelta(days=1)
@@ -121,6 +121,13 @@ class EstimationTests(TestCase):
 
         self.assertEqual(estimate_orders(self.now)[0].build_samples, 5)
         self.assertEqual(estimate_orders(as_of)[0].build_samples, 0)
+
+    def test_orders_dropped_from_new_after_as_of_are_still_waiting(self):
+        # Last seen 2 days ago, removed yesterday: still waiting at a time in between
+        order = self._order('Dropped', 'NEW', order_day=80, removed_at=self.now - DAY)
+
+        self.assertEqual(_left_new(order, [], [], self.now), (order.last_seen_at, order.removed_at))
+        self.assertIsNone(_left_new(order, [], [], self.now - DAY - DAY / 2))
 
     def test_compute_estimates_replaces_stored_estimates(self):
         compute_estimates()

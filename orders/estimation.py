@@ -90,7 +90,7 @@ def _left_new(order, rows, runs, as_of):
         # Seen after missed runs: it left NEW sometime after the run before
         prev = bisect.bisect_left(runs, row.timestamp) - 1
         return (runs[prev] if prev >= 0 else row.timestamp), row.timestamp
-    if order.removed_at and order.status == 'NEW':
+    if order.removed_at and order.removed_at <= as_of and order.status == 'NEW':
         return order.last_seen_at, order.removed_at
     return None
 

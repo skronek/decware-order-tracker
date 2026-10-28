@@ -44,7 +44,7 @@ src/
 ### Current state vs. standard (known debt)
 
 - All HTTP goes through `lib/api-client.js` (`baseURL: '/api'`). Its response interceptor rewrites `error.message` to something fit to show (404 → "Order not found.", otherwise DRF's `detail`), so callers just display `error.message`. Request functions and `use-order-details.js` live in `features/orders/api/`. The generic `hooks/useApi.js` stays shared.
-- Code is still mostly organized by type (`components/`, `pages/`). The order components there (`OrderDetails`, `SearchResults`, `order-summary`, …) belong in `features/orders/components/` when they next move.
+- Code is still mostly organized by type (`components/`, `pages/`). `OrderDetails` has moved to `features/orders/components/order-details.js`; the other order components (`SearchResults`, `order-summary`, …) belong there too when they next move.
 - Shared building blocks: `components/common/LoadingSpinner` for loading states, `utils/orderFormat.js` (`formatDate` and the status/estimate labels), `utils/storage.js` for saved order IDs (always strings). The grey button is the theme's `secondary` color (`color="secondary"`).
 - Bulletproof React uses TypeScript, ESLint import-boundary rules, and `@/` path aliases. None of these are set up here. Don't introduce them unless asked.
 - MSW isn't installed. The old unused `src/mocks/` handlers were deleted; add MSW back (v2 API, in `src/testing/`) when tests are moved over to it.

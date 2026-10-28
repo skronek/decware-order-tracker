@@ -1,10 +1,10 @@
 import React from 'react';
 import { render, screen, within, fireEvent } from '@testing-library/react';
-import { OrderDetails } from '../OrderDetails';
-import { getOrder } from '../../features/orders/api/get-order';
-import { getSavedOrderIds } from '../../utils/storage';
+import { OrderDetails } from '../order-details';
+import { getOrder } from '../../api/get-order';
+import { getSavedOrderIds } from '../../../../utils/storage';
 
-jest.mock('../../features/orders/api/get-order');
+jest.mock('../../api/get-order');
 jest.mock('react-router-dom', () => ({
   useParams: () => ({ orderId: '14775' }),
   Link: require('react').forwardRef(({ to, children, ...rest }, ref) => <a ref={ref} href={to} {...rest}>{children}</a>),

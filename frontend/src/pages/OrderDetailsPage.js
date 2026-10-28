@@ -1,6 +1,6 @@
 import React from 'react';
 import { Typography, Container, Box } from '@mui/material';
-import { OrderDetails } from '../components/OrderDetails';
+import { OrderDetails } from '../features/orders/components/order-details';
 
 const OrderDetailsPage = () => {
   return (
