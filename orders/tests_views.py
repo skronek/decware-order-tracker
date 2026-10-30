@@ -1,4 +1,7 @@
+from datetime import timedelta
+
 from django.urls import reverse
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APITestCase
 from .models import OrderRecord, StatusHistory
@@ -174,3 +177,30 @@ class StatusHistoryViewSetTests(APITestCase):
         """Ensure retrieving a non-existent history record returns 404 Not Found."""
         response = self.client.get(self.non_existent_url)
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+
+class HealthCheckTests(APITestCase):
+    """Tests for the health endpoint the uptime monitor polls."""
+    url = '/api/health/'
+
+    def test_recent_scrape_is_healthy(self):
+        """A scrape within the allowed age returns 200."""
+        last_scrape = timezone.now() - timedelta(hours=20)
+        OrderRecord.objects.create(customer_name="Fresh", model="F1", last_seen_at=last_scrape)
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['status'], 'ok')
+        self.assertEqual(response.data['last_scrape'], last_scrape)
+
+    def test_stale_scrape_is_unhealthy(self):
+        """No scrape for longer than the allowed age returns 503 so the monitor alerts."""
+        OrderRecord.objects.create(customer_name="Stale", model="S1", last_seen_at=timezone.now() - timedelta(hours=40))
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, status.HTTP_503_SERVICE_UNAVAILABLE)
+        self.assertEqual(response.data['status'], 'stale')
+
+    def test_no_scrape_is_unhealthy(self):
+        """An empty database has never been scraped, so it is unhealthy."""
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, status.HTTP_503_SERVICE_UNAVAILABLE)
+        self.assertIsNone(response.data['last_scrape'])

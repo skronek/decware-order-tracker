@@ -25,7 +25,7 @@ Always pass `--settings=decware_order_tracker.test_settings` to backend tests; t
 - `decware_order_tracker/`: project settings, URL routing, HTTPS middleware, and the view that serves the React build.
 - `orders/`: the only app. Models, scraper, estimation, DRF viewsets, management commands. See `orders/CLAUDE.md`.
 - `frontend/`: Create React App + MUI. See `frontend/CLAUDE.md` for the coding standards (Bulletproof React).
-- API is mounted at `/api/orders/` and the router adds `orders/`, so list/detail is `/api/orders/orders/`. Every path not under `api/`, `api-auth/`, `api-docs/` or `admin/` returns the React `index.html`.
+- API is mounted at `/api/orders/` and the router adds `orders/`, so list/detail is `/api/orders/orders/`. `/api/health/` returns 503 when the last successful scrape is over 36 hours old; it is meant for an uptime monitor. Every path not under `api/`, `api-auth/`, `api-docs/` or `admin/` returns the React `index.html`.
 
 ## Deployment (Heroku)
 
