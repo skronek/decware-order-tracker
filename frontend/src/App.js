@@ -7,6 +7,7 @@ import Layout from './components/layout/Layout';
 import HomePage from './pages/HomePage';
 import OrderDetailsPage from './pages/OrderDetailsPage';
 import ErrorBoundary from './components/common/ErrorBoundary';
+import { usePageViews } from './hooks/use-page-views';
 
 // Catches a page's errors inside the layout so the header and nav stay usable.
 // Keyed by path so navigating away clears the error.
@@ -15,12 +16,19 @@ const PageErrorBoundary = ({ children }) => {
   return <ErrorBoundary key={pathname}>{children}</ErrorBoundary>;
 };
 
+// Hooks need a component inside the router
+const PageViewTracker = () => {
+  usePageViews();
+  return null;
+};
+
 function App() {
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
       <ErrorBoundary>
         <Router>
+          <PageViewTracker />
           <Layout>
             <PageErrorBoundary>
               <Routes>
