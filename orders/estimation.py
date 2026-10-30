@@ -25,8 +25,11 @@ RATE_WINDOW = datetime.timedelta(weeks=52)
 # A few weeks' rate can run ~50% fast: May 2025 measured 15.5/week, the next 17 months
 # averaged 10.2/week.
 SLOW_RATE_FACTOR = 0.65
-# Build days (typical, late) used until enough builds have been observed
-DEFAULT_BUILD_DAYS = (14.0, 21.0)
+# The early end of the range assumes orders start this much faster: the fast stretch above
+# ran about 1.5 times the long-run rate.
+FAST_RATE_FACTOR = 1.5
+# Build days (early, typical, late) used until enough builds have been observed
+DEFAULT_BUILD_DAYS = (10.0, 14.0, 21.0)
 MIN_BUILD_SAMPLES = 5
 # Events known to within this long count as precisely timed
 PRECISE_GAP = datetime.timedelta(days=3)
@@ -44,6 +47,7 @@ WEEK = datetime.timedelta(weeks=1)
 class Model:
     starts_per_week: float
     precise_starts: int  # Starts in the rate window that were timed to within PRECISE_GAP
+    build_early_days: float
     build_typical_days: float
     build_late_days: float
     build_samples: int
@@ -180,10 +184,10 @@ def build_model(as_of):
     rate, precise = _start_rate(starts.values(), runs, as_of)
     builds = _build_days(orders, history, as_of)
     if len(builds) >= MIN_BUILD_SAMPLES:
-        typical, late = _percentile(builds, 0.5), _percentile(builds, 0.8)
+        early, typical, late = (_percentile(builds, q) for q in (0.2, 0.5, 0.8))
     else:
-        typical, late = DEFAULT_BUILD_DAYS
-    return Model(rate, precise, typical, late, len(builds)), orders, history, runs
+        early, typical, late = DEFAULT_BUILD_DAYS
+    return Model(rate, precise, early, typical, late, len(builds)), orders, history, runs
 
 
 def _confidence(model, waiting, days_out=0):
@@ -226,19 +230,21 @@ def estimate_orders(as_of=None):
         started = left_new[1] if left_new else (rows[0].timestamp if rows else order.time_created)
         elapsed = (as_of - started) / DAY
         typical = max(1.0, model.build_typical_days - elapsed)
+        early = min(typical, max(1.0, model.build_early_days - elapsed))
         late = max(typical, model.build_late_days - elapsed)
         confidence = _confidence(model, waiting=False)
-        estimates.append(_estimate(order, as_of, typical, late, None, confidence,
+        estimates.append(_estimate(order, as_of, early, typical, late, None, confidence,
                                    _building_explanation(status, model, elapsed)))
 
     if model.starts_per_week > 0:
         queue.sort(key=lambda o: (o.order_date, o.pk))
         for position, order in enumerate(queue):
             weeks = (position + 1) / model.starts_per_week
+            early = weeks / FAST_RATE_FACTOR * 7 + model.build_early_days
             typical = weeks * 7 + model.build_typical_days
             late = weeks / SLOW_RATE_FACTOR * 7 + model.build_late_days
             confidence = _confidence(model, waiting=True, days_out=typical)
-            estimates.append(_estimate(order, as_of, typical, late, position, confidence,
+            estimates.append(_estimate(order, as_of, early, typical, late, position, confidence,
                                        _waiting_explanation(position, model, confidence)))
     return model, estimates
 
@@ -262,9 +268,10 @@ def _building_explanation(status, model, elapsed_days):
             f"{model.build_typical_days:.0f} days from start to passing quality control.")
 
 
-def _estimate(order, as_of, typical_days, late_days, position, confidence, explanation):
+def _estimate(order, as_of, early_days, typical_days, late_days, position, confidence, explanation):
     return OrderEstimate(
         order=order,
+        range_start_date=(as_of + early_days * DAY).date(),
         estimated_date=(as_of + typical_days * DAY).date(),
         range_end_date=(as_of + late_days * DAY).date(),
         queue_position=position,
@@ -295,7 +302,7 @@ def backtest(as_of, now=None):
     orders_now, history_now = _load(now)
     starts_now = _starts(orders_now, history_now, _run_times(orders_now, history_now, now), now)
 
-    errors, in_range, started, precise = [], 0, 0, 0
+    errors, in_range, before_range, started, precise = [], 0, 0, 0, 0
     for est in estimates:
         actual = starts_now.get(est.order_id)
         if est.queue_position is None or not actual:
@@ -303,6 +310,7 @@ def backtest(as_of, now=None):
         started += 1
         precise += actual[1] - actual[0] <= PRECISE_GAP
         # Compare predicted start dates (estimate minus build time) with the actual start window
+        early_start = est.range_start_date - datetime.timedelta(days=model.build_early_days)
         typical_start = est.estimated_date - datetime.timedelta(days=model.build_typical_days)
         late_start = est.range_end_date - datetime.timedelta(days=model.build_late_days)
         earliest, latest = actual[0].date(), actual[1].date()
@@ -312,8 +320,10 @@ def backtest(as_of, now=None):
             errors.append((typical_start - latest).days)
         else:
             errors.append(0)
-        if typical_start <= latest and late_start >= earliest:
+        if early_start <= latest and late_start >= earliest:
             in_range += 1
+        elif latest < early_start:
+            before_range += 1
 
     weeks = (now - as_of) / WEEK
     return {
@@ -324,4 +334,5 @@ def backtest(as_of, now=None):
         'waiting_at_as_of': sum(1 for e in estimates if e.queue_position is not None),
         'median_error_days': _percentile(errors, 0.5) if errors else None,
         'in_range_share': in_range / started if started else None,
+        'before_range_share': before_range / started if started else None,
     }

@@ -14,7 +14,7 @@ import { useOrderDetails } from '../api/use-order-details';
 import { StatusHistoryTimeline } from '../../../components/StatusHistoryTimeline';
 import LoadingSpinner from '../../../components/common/LoadingSpinner';
 import { addOrderId, isOrderSaved, removeOrderId } from '../../../utils/storage';
-import { formatDate, formatStatus, statusColor, isFinished, formatEstCompletion, formatConfidence } from '../../../utils/orderFormat';
+import { formatDate, formatStatus, statusColor, isFinished, formatEstRange, formatConfidence } from '../../../utils/orderFormat';
 
 // A label/value pair in the details grid
 const Field = ({ label, children, testId, sm = 4 }) => (
@@ -44,9 +44,14 @@ const EstimateSection = ({ order }) => {
 
   return (
     <Grid container spacing={2}>
-      <Field label="Estimated to pass QC" testId="completion-date">
-        {formatEstCompletion(estimate)}
+      <Field label="Best guess to pass QC" testId="completion-date">
+        {formatDate(estimate.estimated_date)}
       </Field>
+      {formatEstRange(estimate) && (
+        <Field label="Likely range" testId="completion-range">
+          {formatEstRange(estimate)}
+        </Field>
+      )}
       {estimate.queue_position !== null && estimate.queue_position !== undefined && (
         <Field label="Place in build queue" testId="queue-position">
           #{(estimate.queue_position + 1).toLocaleString()}

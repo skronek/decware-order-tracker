@@ -94,6 +94,7 @@ class OrderRecordSerializerTests(TestCase):
         today = timezone.localdate()
         OrderEstimate.objects.create(
             order=self.order,
+            range_start_date=today + datetime.timedelta(days=15),
             estimated_date=today + datetime.timedelta(days=20),
             range_end_date=today + datetime.timedelta(days=30),
             queue_position=None,
@@ -105,6 +106,7 @@ class OrderRecordSerializerTests(TestCase):
         est = OrderRecordSerializer(instance=order).data['estimated_completion']
         self.assertEqual(est['days_remaining'], 20)
         self.assertEqual(est['estimated_date'], (today + datetime.timedelta(days=20)).isoformat())
+        self.assertEqual(est['range_start_date'], (today + datetime.timedelta(days=15)).isoformat())
         self.assertEqual(est['range_end_date'], (today + datetime.timedelta(days=30)).isoformat())
         self.assertEqual(est['confidence_level'], 'MEDIUM')
         self.assertEqual(est['explanation'], 'Being built.')
@@ -113,6 +115,7 @@ class OrderRecordSerializerTests(TestCase):
         today = timezone.localdate()
         OrderEstimate.objects.create(
             order=self.order,
+            range_start_date=today - datetime.timedelta(days=5),
             estimated_date=today - datetime.timedelta(days=3),
             range_end_date=today,
             confidence_level="LOW",

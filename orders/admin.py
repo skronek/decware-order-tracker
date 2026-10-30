@@ -20,7 +20,7 @@ class StatusHistoryAdmin(admin.ModelAdmin):
 
 @admin.register(OrderEstimate)
 class OrderEstimateAdmin(admin.ModelAdmin):
-    list_display = ('order', 'queue_position', 'estimated_date', 'range_end_date', 'confidence_level', 'computed_at')
+    list_display = ('order', 'queue_position', 'estimated_date', 'range_start_date', 'range_end_date', 'confidence_level', 'computed_at')
     list_filter = ('confidence_level',)
     search_fields = ('order__customer_name',)
     ordering = ('estimated_date',)

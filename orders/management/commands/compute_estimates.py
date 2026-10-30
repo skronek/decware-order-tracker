@@ -33,6 +33,6 @@ class Command(BaseCommand):
             raise CommandError("No order data to estimate from")
         self.stdout.write(self.style.SUCCESS(
             f"Stored {count} estimates. Starts/week: {model.starts_per_week:.1f} "
-            f"({model.precise_starts} precisely timed), build days: {model.build_typical_days:.1f} typical / "
+            f"({model.precise_starts} precisely timed), build days: {model.build_early_days:.1f} early / {model.build_typical_days:.1f} typical / "
             f"{model.build_late_days:.1f} late from {model.build_samples} builds"
         ))

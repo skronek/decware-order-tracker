@@ -27,6 +27,7 @@ const mockOrder = {
     { id: 3436, order: 14775, previous_status: null, new_status: 'NEW', timestamp: '2026-10-27T20:25:29Z', is_observed: false },
   ],
   estimated_completion: {
+    range_start_date: '2029-09-12',
     estimated_date: '2030-08-21',
     range_end_date: '2032-09-06',
     days_remaining: 1394,
@@ -70,9 +71,11 @@ describe('OrderDetails', () => {
   it('renders the estimate', async () => {
     await renderWith(mockOrder);
     const estimate = screen.getByTestId('estimate');
-    const start = new Date(2030, 7, 21).toLocaleDateString();
+    const start = new Date(2029, 8, 12).toLocaleDateString();
+    const best = new Date(2030, 7, 21).toLocaleDateString();
     const end = new Date(2032, 8, 6).toLocaleDateString();
-    expect(within(estimate).getByTestId('completion-date')).toHaveTextContent(`${start} – ${end}`);
+    expect(within(estimate).getByTestId('completion-date')).toHaveTextContent(best);
+    expect(within(estimate).getByTestId('completion-range')).toHaveTextContent(`${start} – ${end}`);
     expect(within(estimate).getByTestId('queue-position')).toHaveTextContent('#2,004');
     expect(within(estimate).getByTestId('confidence-level')).toHaveTextContent('Low');
     expect(within(estimate).getByText('Your order is #2,004 in the build queue.')).toBeInTheDocument();

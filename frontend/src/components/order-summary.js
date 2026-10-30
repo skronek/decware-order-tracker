@@ -21,7 +21,7 @@ export const OrderSummary = ({ order, children }) => (
       <Field label="Volts">{order.volts}</Field>
       <Field label="Order Date">{formatDate(order.order_date)}</Field>
       <Field label="Status">{formatStatus(order.status)}</Field>
-      <Field label="Est. Completion">{formatEstCompletion(order.estimated_completion)}</Field>
+      <Field label="Best guess">{formatEstCompletion(order.estimated_completion)}</Field>
       {order.estimated_completion?.explanation && (
         <Grid size={{ xs: 12 }}>
           <Typography variant="body2" color="text.secondary">{order.estimated_completion.explanation}</Typography>

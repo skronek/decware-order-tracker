@@ -33,6 +33,7 @@ class OrderRecordSerializer(serializers.ModelSerializer):
             return None
         return {
             'estimated_date': estimate.estimated_date.isoformat(),
+            'range_start_date': estimate.range_start_date.isoformat(),
             'range_end_date': estimate.range_end_date.isoformat(),
             'days_remaining': max(0, (estimate.estimated_date - timezone.localdate()).days),
             'queue_position': estimate.queue_position,

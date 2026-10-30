@@ -6,7 +6,7 @@ import datetime
 from django.test import TestCase
 from django.utils import timezone
 
-from .estimation import DEFAULT_BUILD_DAYS, SLOW_RATE_FACTOR, _left_new, backtest, compute_estimates, estimate_orders
+from .estimation import DEFAULT_BUILD_DAYS, FAST_RATE_FACTOR, SLOW_RATE_FACTOR, _left_new, backtest, compute_estimates, estimate_orders
 from .models import OrderEstimate, OrderRecord, StatusHistory
 
 DAY = datetime.timedelta(days=1)
@@ -54,11 +54,13 @@ class EstimationTests(TestCase):
 
     def test_waiting_orders_are_estimated_in_queue_order(self):
         model, estimates = self._estimates()
-        typical_build, late_build = DEFAULT_BUILD_DAYS
+        early_build, typical_build, late_build = DEFAULT_BUILD_DAYS
         for position, order in enumerate(self.waiting):
             estimate = estimates[order.customer_name]
             weeks = (position + 1) / model.starts_per_week
             self.assertEqual(estimate.queue_position, position)
+            self.assertEqual(estimate.range_start_date,
+                             (self.now + (weeks / FAST_RATE_FACTOR * 7 + early_build) * DAY).date())
             self.assertEqual(estimate.estimated_date, (self.now + (weeks * 7 + typical_build) * DAY).date())
             self.assertEqual(estimate.range_end_date,
                              (self.now + (weeks / SLOW_RATE_FACTOR * 7 + late_build) * DAY).date())
@@ -72,7 +74,19 @@ class EstimationTests(TestCase):
 
         estimate = estimates['On bench']
         self.assertIsNone(estimate.queue_position)
-        self.assertEqual(estimate.estimated_date, (self.now + (DEFAULT_BUILD_DAYS[0] - 5) * DAY).date())
+        self.assertEqual(estimate.range_start_date, (self.now + (DEFAULT_BUILD_DAYS[0] - 5) * DAY).date())
+        self.assertEqual(estimate.estimated_date, (self.now + (DEFAULT_BUILD_DAYS[1] - 5) * DAY).date())
+
+    def test_best_guess_is_inside_the_range(self):
+        order = self._order('Slow', 'TESTING', order_day=50)
+        self._history(order, None, 'NEW', self.first_run, observed=False)
+        self._history(order, 'NEW', 'ON_BENCH', self.now - 30 * DAY)
+
+        _, estimates = self._estimates()
+
+        for estimate in estimates.values():
+            self.assertLessEqual(estimate.range_start_date, estimate.estimated_date)
+            self.assertLessEqual(estimate.estimated_date, estimate.range_end_date)
 
     def test_finished_orders_are_not_estimated(self):
         passed = self._order('Passed', 'PASSED_QC', order_day=60)
@@ -138,6 +152,10 @@ class EstimationTests(TestCase):
         result = backtest(self.now - 35 * DAY, now=self.now)
         self.assertEqual(result['actual_starts'], 10)
         self.assertAlmostEqual(result['predicted_starts'], 10, delta=1)
+        # The shop kept its measured pace, but starts two orders on the same day: the second
+        # one started 3 days out, ahead of its early end (1 week / FAST_RATE_FACTOR)
+        self.assertAlmostEqual(result['in_range_share'], 0.9)
+        self.assertAlmostEqual(result['before_range_share'], 0.1)
 
     def test_explanations_match_the_numbers(self):
         order = self._order('On bench', 'ON_BENCH', order_day=50)

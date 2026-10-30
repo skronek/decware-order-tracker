@@ -1,4 +1,4 @@
-import { formatStatus, statusColor, isFinished, formatDate, formatEstCompletion, formatConfidence } from '../orderFormat';
+import { formatStatus, statusColor, isFinished, formatDate, formatEstCompletion, formatEstRange, formatConfidence } from '../orderFormat';
 
 describe('formatStatus', () => {
   it('labels every status the scraper records', () => {
@@ -47,21 +47,31 @@ describe('formatDate', () => {
   });
 });
 
-describe('formatEstCompletion', () => {
-  it('shows a range of calendar dates without shifting them a day', () => {
-    const start = new Date(2027, 2, 3).toLocaleDateString();
-    const end = new Date(2027, 2, 10).toLocaleDateString();
-    expect(formatEstCompletion({ estimated_date: '2027-03-03', range_end_date: '2027-03-10' }))
-      .toBe(`${start} – ${end}`);
+describe('formatEstCompletion and formatEstRange', () => {
+  const estimate = { range_start_date: '2027-03-01', estimated_date: '2027-03-03', range_end_date: '2027-03-10' };
+  const start = new Date(2027, 2, 1).toLocaleDateString();
+  const best = new Date(2027, 2, 3).toLocaleDateString();
+  const end = new Date(2027, 2, 10).toLocaleDateString();
+
+  it('shows the best guess and the likely range without shifting the dates a day', () => {
+    expect(formatEstRange(estimate)).toBe(`${start} – ${end}`);
+    expect(formatEstCompletion(estimate)).toBe(`${best} (likely ${start} – ${end})`);
   });
 
-  it('shows a single date when the range is one day', () => {
-    expect(formatEstCompletion({ estimated_date: '2027-03-03', range_end_date: '2027-03-03' }))
-      .toBe(new Date(2027, 2, 3).toLocaleDateString());
+  it('starts the range at the best guess when there is no early date', () => {
+    const { range_start_date, ...noStart } = estimate;
+    expect(formatEstRange(noStart)).toBe(`${best} – ${end}`);
+  });
+
+  it('shows only the best guess when the range is one day', () => {
+    const oneDay = { range_start_date: '2027-03-03', estimated_date: '2027-03-03', range_end_date: '2027-03-03' };
+    expect(formatEstRange(oneDay)).toBeNull();
+    expect(formatEstCompletion(oneDay)).toBe(best);
   });
 
   it('returns N/A without an estimate', () => {
     expect(formatEstCompletion(null)).toBe('N/A');
+    expect(formatEstRange(null)).toBeNull();
   });
 });
 

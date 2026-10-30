@@ -35,13 +35,22 @@ export const formatDate = (value) => {
   return date.toLocaleDateString();
 };
 
+// The likely range around the best guess, or null when it is a single day
+export const formatEstRange = (completionData) => {
+  if (!completionData?.estimated_date) return null;
+  const { estimated_date, range_start_date = estimated_date, range_end_date = estimated_date } = completionData;
+  if (range_start_date === range_end_date) return null;
+  return `${formatDate(range_start_date)} – ${formatDate(range_end_date)}`;
+};
+
+// The best guess, followed by the likely range when there is one
 export const formatEstCompletion = (completionData) => {
   if (!completionData) return 'N/A';
-  const { days_remaining, estimated_date, range_end_date } = completionData;
-  if (estimated_date && range_end_date && range_end_date !== estimated_date) {
-    return `${formatDate(estimated_date)} – ${formatDate(range_end_date)}`;
+  const { days_remaining, estimated_date } = completionData;
+  if (estimated_date) {
+    const range = formatEstRange(completionData);
+    return range ? `${formatDate(estimated_date)} (likely ${range})` : formatDate(estimated_date);
   }
-  if (estimated_date) return formatDate(estimated_date);
   if (days_remaining !== undefined && days_remaining !== null) {
     if (days_remaining < 0) return 'Overdue';
     if (days_remaining === 0) return 'Today';
