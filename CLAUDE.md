@@ -31,7 +31,7 @@ Always pass `--settings=decware_order_tracker.test_settings` to backend tests; t
 
 - `Procfile`: gunicorn web dyno; `release` runs migrations.
 - The Node buildpack runs the root `package.json` `build` script, which is `heroku-build.sh`. That script builds the frontend, copies it to `staticfiles/`, and copies `index.html` to `decware_order_tracker/templates/react/`. Both outputs are generated at build time and gitignored.
-- The user runs production deploys (`git push heroku main`). Ask them to do it; don't push yourself.
+- Deploy with `git push heroku main` when the user asks. Push from an up-to-date `main` with tests passing. The push waits for the `release` migrations, so it can take over two minutes; run it in the background.
 
 ## Gotchas
 
