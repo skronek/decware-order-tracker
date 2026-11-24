@@ -21,6 +21,10 @@ from .models import OrderRecord, StatusHistory, OrderEstimate
 DONE_STATUSES = {'PASSED_QC', 'PASSED_QC_AWAITING_PAYMENT', 'COMPLETED_WAITING_BASE'}
 # The start rate is measured over this much recent history (or all of it, if less)
 RATE_WINDOW = datetime.timedelta(weeks=52)
+# The rate is averaged over windows ending on each of this many recent days, so one batch of
+# starts or a quiet weekend doesn't swing deep-queue estimates by weeks. Only windows with a
+# full RATE_WINDOW of history count; a shorter one would be a different, noisier measurement.
+RATE_SMOOTHING_DAYS = 28
 # The late end of the range assumes orders start this much slower than the measured rate.
 # A few weeks' rate can run ~50% fast: May 2025 measured 15.5/week, the next 17 months
 # averaged 10.2/week.
@@ -33,8 +37,12 @@ DEFAULT_BUILD_DAYS = (10.0, 14.0, 21.0)
 MIN_BUILD_SAMPLES = 5
 # Events known to within this long count as precisely timed
 PRECISE_GAP = datetime.timedelta(days=3)
-# Orders that drop off while NEW count as started only if fewer than this many orders
-# were still waiting ahead of them (the shop builds roughly, not strictly, in order)
+# The shop builds roughly, not strictly, in order: within this many queue positions of the
+# front, orders start in no particular order. Orders that drop off while NEW count as started
+# only if fewer than this many were still waiting ahead of them, and each range's ends allow
+# for an order starting this many places early or late. After the outage, starts came from
+# positions up to ~90 while dozens of older orders sat untouched, so ranges that ignored this
+# put most near-front starts before the early end, whatever the rate.
 OUT_OF_ORDER_ALLOWANCE = 50
 # Timestamps closer together than this were written by the same scraper run
 RUN_GROUPING = datetime.timedelta(hours=1)
@@ -153,6 +161,19 @@ def _start_rate(starts, runs, as_of):
     return total / weeks, precise
 
 
+def _smoothed_start_rate(starts, runs, as_of):
+    """_start_rate averaged over windows ending on each of the last RATE_SMOOTHING_DAYS days."""
+    starts = list(starts)
+    rate, precise = _start_rate(starts, runs, as_of)
+    rates = [rate]
+    for k in range(1, RATE_SMOOTHING_DAYS):
+        end = as_of - k * DAY
+        if end - RATE_WINDOW < runs[0]:
+            break
+        rates.append(_start_rate(starts, runs, end)[0])
+    return sum(rates) / len(rates), precise
+
+
 def _build_days(orders, history, as_of):
     """Observed days from leaving NEW to passing QC, as known at `as_of`."""
     samples = []
@@ -181,7 +202,7 @@ def build_model(as_of):
     if not runs:
         return None, orders, history, runs
     starts = _starts(orders, history, runs, as_of)
-    rate, precise = _start_rate(starts.values(), runs, as_of)
+    rate, precise = _smoothed_start_rate(starts.values(), runs, as_of)
     builds = _build_days(orders, history, as_of)
     if len(builds) >= MIN_BUILD_SAMPLES:
         early, typical, late = (_percentile(builds, q) for q in (0.2, 0.5, 0.8))
@@ -238,11 +259,12 @@ def estimate_orders(as_of=None):
 
     if model.starts_per_week > 0:
         queue.sort(key=lambda o: (o.order_date, o.pk))
+        rate = model.starts_per_week
         for position, order in enumerate(queue):
-            weeks = (position + 1) / model.starts_per_week
-            early = weeks / FAST_RATE_FACTOR * 7 + model.build_early_days
-            typical = weeks * 7 + model.build_typical_days
-            late = weeks / SLOW_RATE_FACTOR * 7 + model.build_late_days
+            ahead = position + 1
+            early = max(0, ahead - OUT_OF_ORDER_ALLOWANCE) / rate / FAST_RATE_FACTOR * 7 + model.build_early_days
+            typical = ahead / rate * 7 + model.build_typical_days
+            late = (ahead + OUT_OF_ORDER_ALLOWANCE) / rate / SLOW_RATE_FACTOR * 7 + model.build_late_days
             confidence = _confidence(model, waiting=True, days_out=typical)
             estimates.append(_estimate(order, as_of, early, typical, late, position, confidence,
                                        _waiting_explanation(position, model, confidence)))
@@ -293,7 +315,8 @@ def compute_estimates():
 def backtest(as_of, now=None):
     """
     Estimates start dates for the orders waiting at `as_of` using only what was known
-    then, and compares them with when those orders actually left NEW.
+    then, and compares them with when those orders actually left NEW. A short backtest only
+    sees orders that started early, so read the shares together with `overdue`.
     """
     now = now or timezone.now()
     model, estimates = estimate_orders(as_of)
@@ -302,10 +325,14 @@ def backtest(as_of, now=None):
     orders_now, history_now = _load(now)
     starts_now = _starts(orders_now, history_now, _run_times(orders_now, history_now, now), now)
 
-    errors, in_range, before_range, started, precise = [], 0, 0, 0, 0
+    errors, in_range, before_range, started, precise, overdue = [], 0, 0, 0, 0, 0
     for est in estimates:
+        if est.queue_position is None:
+            continue
         actual = starts_now.get(est.order_id)
-        if est.queue_position is None or not actual:
+        if not actual:
+            # Still waiting, though it should have started by the late end of its range
+            overdue += est.range_end_date - datetime.timedelta(days=model.build_late_days) < now.date()
             continue
         started += 1
         precise += actual[1] - actual[0] <= PRECISE_GAP
@@ -335,4 +362,6 @@ def backtest(as_of, now=None):
         'median_error_days': _percentile(errors, 0.5) if errors else None,
         'in_range_share': in_range / started if started else None,
         'before_range_share': before_range / started if started else None,
+        # The shares above only see orders that started; this catches ranges that ended too soon
+        'overdue': overdue,
     }

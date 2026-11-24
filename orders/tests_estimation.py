@@ -3,13 +3,45 @@ Unit tests for the completion estimates in orders/estimation.py.
 """
 import datetime
 
-from django.test import TestCase
+from django.test import SimpleTestCase, TestCase
 from django.utils import timezone
 
-from .estimation import DEFAULT_BUILD_DAYS, FAST_RATE_FACTOR, SLOW_RATE_FACTOR, _left_new, backtest, compute_estimates, estimate_orders
+from .estimation import (DEFAULT_BUILD_DAYS, FAST_RATE_FACTOR, OUT_OF_ORDER_ALLOWANCE, RATE_SMOOTHING_DAYS, RATE_WINDOW,
+                         SLOW_RATE_FACTOR,
+                         _left_new, _smoothed_start_rate, _start_rate, backtest, compute_estimates,
+                         estimate_orders)
 from .models import OrderEstimate, OrderRecord, StatusHistory
 
 DAY = datetime.timedelta(days=1)
+
+
+class SmoothedStartRateTests(SimpleTestCase):
+    """One start a week, timed exactly, with a long or short history behind it."""
+
+    def setUp(self):
+        self.now = timezone.now()
+
+    def _steady(self, weeks):
+        starts = [(self.now - (7 * w + 3) * DAY,) * 2 for w in range(weeks)]
+        return starts, [self.now - weeks * 7 * DAY]
+
+    def test_a_batch_of_starts_is_spread_over_the_smoothing_days(self):
+        starts, runs = self._steady(60)
+        batch = [(self.now - datetime.timedelta(hours=1),) * 2] * 28
+        steady_rate, _ = _smoothed_start_rate(starts, runs, self.now)
+
+        rate, precise = _smoothed_start_rate(starts + batch, runs, self.now)
+
+        weeks = RATE_WINDOW / datetime.timedelta(weeks=1)
+        # Without smoothing the batch would add 28 / 52 starts a week at once
+        self.assertAlmostEqual(_start_rate(starts + batch, runs, self.now)[0]
+                               - _start_rate(starts, runs, self.now)[0], 28 / weeks)
+        self.assertAlmostEqual(rate - steady_rate, 28 / weeks / RATE_SMOOTHING_DAYS)
+        self.assertEqual(precise, 52 + 28)
+
+    def test_short_history_is_not_smoothed(self):
+        starts, runs = self._steady(10)
+        self.assertEqual(_smoothed_start_rate(starts, runs, self.now), _start_rate(starts, runs, self.now))
 
 
 class EstimationTests(TestCase):
@@ -55,15 +87,32 @@ class EstimationTests(TestCase):
     def test_waiting_orders_are_estimated_in_queue_order(self):
         model, estimates = self._estimates()
         early_build, typical_build, late_build = DEFAULT_BUILD_DAYS
+        rate = model.starts_per_week
         for position, order in enumerate(self.waiting):
             estimate = estimates[order.customer_name]
-            weeks = (position + 1) / model.starts_per_week
+            weeks = (position + 1) / rate
             self.assertEqual(estimate.queue_position, position)
-            self.assertEqual(estimate.range_start_date,
-                             (self.now + (weeks / FAST_RATE_FACTOR * 7 + early_build) * DAY).date())
+            # Within OUT_OF_ORDER_ALLOWANCE of the front, the order could start any day
+            self.assertEqual(estimate.range_start_date, (self.now + early_build * DAY).date())
             self.assertEqual(estimate.estimated_date, (self.now + (weeks * 7 + typical_build) * DAY).date())
+            late_weeks = (position + 1 + OUT_OF_ORDER_ALLOWANCE) / rate
             self.assertEqual(estimate.range_end_date,
-                             (self.now + (weeks / SLOW_RATE_FACTOR * 7 + late_build) * DAY).date())
+                             (self.now + (late_weeks / SLOW_RATE_FACTOR * 7 + late_build) * DAY).date())
+
+    def test_range_allows_for_out_of_order_starts(self):
+        # Far back in the queue the early end is OUT_OF_ORDER_ALLOWANCE positions closer
+        for i in range(200):
+            order = self._order(f'Deep {i}', 'NEW', order_day=200 + i)
+            self._history(order, None, 'NEW', self.first_run, observed=False)
+
+        model, estimates = self._estimates()
+
+        estimate = estimates['Deep 199']
+        rate = model.starts_per_week
+        self.assertEqual(estimate.queue_position, 202)
+        early_weeks = (203 - OUT_OF_ORDER_ALLOWANCE) / rate / FAST_RATE_FACTOR
+        self.assertEqual(estimate.range_start_date,
+                         (self.now + (early_weeks * 7 + DEFAULT_BUILD_DAYS[0]) * DAY).date())
 
     def test_order_being_built_gets_remaining_build_time(self):
         order = self._order('On bench', 'ON_BENCH', order_day=50)
@@ -152,10 +201,16 @@ class EstimationTests(TestCase):
         result = backtest(self.now - 35 * DAY, now=self.now)
         self.assertEqual(result['actual_starts'], 10)
         self.assertAlmostEqual(result['predicted_starts'], 10, delta=1)
-        # The shop kept its measured pace, but starts two orders on the same day: the second
-        # one started 3 days out, ahead of its early end (1 week / FAST_RATE_FACTOR)
-        self.assertAlmostEqual(result['in_range_share'], 0.9)
-        self.assertAlmostEqual(result['before_range_share'], 0.1)
+        # The shop kept its measured pace, so every start fell inside its range
+        self.assertAlmostEqual(result['in_range_share'], 1.0)
+        self.assertAlmostEqual(result['before_range_share'], 0.0)
+        self.assertEqual(result['overdue'], 0)
+
+    def test_backtest_counts_orders_past_their_late_end(self):
+        # Waiting orders that never started, though their whole range is now in the past
+        as_of = self.now - 35 * DAY
+        result = backtest(as_of, now=self.now + 365 * DAY)
+        self.assertEqual(result['overdue'], 3)
 
     def test_explanations_match_the_numbers(self):
         order = self._order('On bench', 'ON_BENCH', order_day=50)
